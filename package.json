@@ -1,0 +1,45 @@
+{
+  "name": "devmemory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Notion-backed developer memory MCP service foundation",
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
+  "packageManager": "npm@11.19.1",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "build": "tsc --project tsconfig.build.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "lint": "node scripts/lint.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:notion": "node scripts/verify-notion.mjs",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@notionhq/client": "5.28.0",
+    "zod": "4.6.7",
+    "pino": "10.4.0"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3",
+    "@types/node": "24.19.2",
+    "vitest": "5.0.5",
+    "vite": "8.3.5"
+  },
+  "overrides": {
+    "@hono/node-server": "2.1.5",
+    "hono": "4.13.14",
+    "rolldown": "1.2.15",
+    "@types/estree": "1.0.9",
+    "magic-string": "1.4.3",
+    "postcss": "8.5.31",
+    "thread-stream": "4.2.0",
+    "tinybench": "6.2.2",
+    "@rolldown/pluginutils": "1.0.1"
+  }
+}
