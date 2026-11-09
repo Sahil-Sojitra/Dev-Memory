@@ -1,0 +1,13 @@
+# Local environment and secret configuration
+.env
+.env.*
+!.env.example
+
+# Private keys and credential bundles
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+secrets/
