@@ -3,15 +3,18 @@
 Status: approved Phase 1 design, with KAN-4/KAN-5 dependency and transport evidence.
 Verification snapshot: 9 November 2026 (Asia/Calcutta).
 
-Production implementation has not started. Successful temporary tests do not mean
-the business services or application exist in this repository.
+KAN-6/KAN-7 provide the foundation, configuration, errors, and logging. KAN-8 adds
+read-only Notion metadata resolution and a startup schema gate; live verification
+passed in the user's terminal. MCP entries/tools and Notion
+record operations remain unimplemented. See [schema validation](notion-schema-validation.md).
+The evidence below records the earlier temporary spike, not a production server.
 
 ## Approved decisions and evidence boundaries
 
 | Decision | Intended implementation | Evidence boundary |
 |---|---|---|
 | Node.js + TypeScript modular monolith | Modular business services and transport adapters in one application | Dependencies and a test-only shared server factory passed |
-| Notion as the only source of truth | Official Notion SDK with API `2025-09-03` explicitly selected | SDK compatibility verified; KAN-5 did not connect to Notion |
+| Notion as the only source of truth | Official Notion SDK with API `2025-09-03` explicitly selected | SDK compatibility and user-run KAN-8 live metadata/schema validation passed; KAN-5 did not connect to Notion |
 | Local MCP over stdio | SDK `serveStdio` entry | Initialization, listing, calling, and stderr logging passed |
 | Remote stateless Streamable HTTP | SDK `createMcpHandler`; Node adapter where needed | Loopback HTTP and actual Antigravity CLI calls passed |
 | Shared services for both transports | Shared business services and tool registration | Test-only factory sharing passed; production services are unimplemented |

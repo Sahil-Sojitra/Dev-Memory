@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.envrc
 
 # Private keys and credential bundles
 *.pem
@@ -11,3 +12,34 @@
 credentials.json
 secrets.json
 secrets/
+
+
+# Installed dependencies, compiled output and incremental TypeScript state
+node_modules/
+dist/
+*.tsbuildinfo
+
+# npm, Vite and Vitest caches and generated test reports
+.npm/
+.cache/
+.vite/
+.vitest/
+coverage/
+test-results/
+
+# Runtime and package-manager diagnostics
+*.log
+npm-debug.log*
+
+# Local Vercel project state; keep deployment configuration trackable
+.vercel/
+
+# Operating-system metadata and editor temporary files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# Keep source, tests, scripts, docs, package-lock.json and shared configuration tracked.
