@@ -1,7 +1,12 @@
 # Dependency baseline (KAN-4)
 
-Status: verified candidates for future initialization; no production dependencies
-installed. Verification snapshot: 9 November 2026, Windows x64.
+Status: approved baseline adopted for KAN-6/KAN-7. The original KAN-4 verification
+snapshot below is 9 November 2026, Windows x64.
+
+The repository now contains the foundation manifest and lockfile. Adoption changes
+only root project metadata; all third-party entries retain the verified graph.
+The original hash below identifies the pre-adoption temporary lockfile, not the
+current root-metadata-adjusted production file.
 
 ## Exact approved versions
 
@@ -26,7 +31,7 @@ The Notion SDK supports and defaults to API `2025-09-03`; explicitly select
 `notionVersion: "2025-09-03"` in future code. This does not prove authentication
 or record-writing capability.
 
-The future manifest split is documented below; no root manifest is created:
+The approved dependency split, now materialized in the root manifest, is:
 
 ```json
 {
@@ -51,7 +56,7 @@ The future manifest split is documented below; no root manifest is created:
 
 ## Approved npm overrides
 
-These accompany the exact direct versions and verified lockfile in a future root
+These accompany the exact direct versions and adopted lockfile in the root
 manifest. All override values are exact pins.
 
 ```json
@@ -160,9 +165,11 @@ KAN-4 evidence includes `package.json`, `package-lock.json`,
 in both directories were rechecked while documenting.
 
 Raw artifacts remain outside this repository and may expire through temp cleanup.
-Before bootstrap, recover and verify that lockfile. If unavailable, regenerate in
-isolation and repeat full verification: its hash alone cannot recreate it.
-No production manifest, lockfile, installation, or bootstrap was created here.
+KAN-6 recovered this lockfile and retained its third-party graph in the repository.
+If reconstructing the original baseline later, verify the raw lockfile before
+adoption or repeat full verification: its hash alone cannot recreate it.
+No production manifest or installation was created during KAN-4; these were added
+later by the KAN-6/KAN-7 implementation batch.
 
 Vercel hosted deployment is **NOT YET VERIFIED**. Its managed patch policy also
 prevents guaranteeing the exact local runtime or runtime maturity age. See
