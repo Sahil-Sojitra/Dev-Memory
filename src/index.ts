@@ -1,3 +1,3 @@
-import { runApplication } from "./app.ts";
+import { runStdio } from "./transports/stdio.ts";
 
-process.exitCode = await runApplication(process.env);
+process.exitCode = await runStdio(process.env);
