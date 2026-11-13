@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
+  "functions": {
+    "api/index.ts": { "maxDuration": 60 }
+  },
+  "rewrites": [
+    { "source": "/api/mcp", "destination": "/api" },
+    { "source": "/api/health", "destination": "/api" },
+    { "source": "/api/ready", "destination": "/api" }
+  ]
+}

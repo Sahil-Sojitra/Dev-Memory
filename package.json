@@ -10,7 +10,7 @@
   "packageManager": "npm@11.19.1",
   "scripts": {
     "dev": "node --watch src/index.ts",
-    "build": "tsc --project tsconfig.build.json",
+    "build": "tsc --project tsconfig.build.json && tsc --project tsconfig.vercel.json",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "lint": "node scripts/lint.mjs",
     "test": "vitest run",
