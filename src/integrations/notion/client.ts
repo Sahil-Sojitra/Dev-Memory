@@ -5,6 +5,9 @@ import { DomainError, NotionIntegrationError, SchemaDriftError } from "../../dom
 import type { ErrorCode } from "../../domain/errors.ts";
 import type { ApprovedPropertyName, DatabaseKey, NotionSchemaReader, PropertyMetadata } from "../../domain/notion-schema.ts";
 import { NOTION_SCHEMA } from "../../domain/schema-map.ts";
+import type { ValidatedDatabase } from "../../domain/notion-schema.ts";
+import type { ProjectRepository } from "../../domain/projects.ts";
+import { createNotionProjectRepository } from "./projects.ts";
 
 export const NOTION_REQUEST_TIMEOUT_MS = 10_000;
 type SdkFetch = NonNullable<NonNullable<ConstructorParameters<typeof Client>[0]>["fetch"]>;
@@ -61,25 +64,31 @@ export interface NotionReaderOptions {
   readonly fetch?: typeof globalThis.fetch;
 }
 
-export function createNotionSchemaReader(config: AppConfig["notion"], options: NotionReaderOptions = {}): NotionSchemaReader {
+export interface NotionClient extends NotionSchemaReader {
+  createProjectRepository(schema: ValidatedDatabase): ProjectRepository;
+}
+
+export function createNotionClient(config: AppConfig["notion"], options: NotionReaderOptions = {}): NotionClient {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const projectSources = new Set<string>();
   // Defense in depth: this integration has no write capability, even by accident.
   const readOnlyFetch: typeof globalThis.fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
-    if (method !== "GET" || url.origin !== "https://api.notion.com"
-      || !/^\/v1\/(databases|data_sources)\/[0-9a-f-]+$/i.test(url.pathname)
+    const metadataRead = method === "GET" && /^\/v1\/(databases|data_sources)\/[0-9a-f-]+$/i.test(url.pathname);
+    const projectQuery = method === "POST" && [...projectSources].some((id) => url.pathname === "/v1/data_sources/" + id + "/query");
+    if ((!metadataRead && !projectQuery) || url.origin !== "https://api.notion.com"
       || url.search || url.hash) {
       throw new DomainError("FORBIDDEN");
     }
     return fetchImplementation(input, { ...init, redirect: "error" });
   };
-  // Adapt only the JSON metadata response surface. No SDK stream types escape.
+  // Adapt the JSON response surface. No SDK stream types escape.
   const sdkFetch: SdkFetch = async (url, init) => {
     const response = await readOnlyFetch(url, init);
     return { ok: response.ok, status: response.status, headers: response.headers, text: () => response.text() };
   };
-  // One client per application instance; every metadata read reuses it.
+  // One client per application instance; metadata and project reads reuse it.
   const client = new Client({
     auth: config.apiToken, notionVersion: config.apiVersion,
     timeoutMs: NOTION_REQUEST_TIMEOUT_MS,
@@ -89,6 +98,11 @@ export function createNotionSchemaReader(config: AppConfig["notion"], options: N
   });
 
   return Object.freeze({
+    createProjectRepository(schema: ValidatedDatabase) {
+      if (schema.databaseId !== config.databases.projects) throw new DomainError("FORBIDDEN");
+      projectSources.add(schema.dataSourceId);
+      return createNotionProjectRepository(client, schema, (error) => mapClientError(error, "projects"));
+    },
     async retrieveDatabase(database: DatabaseKey, id: string) {
       try {
         const parsed = databaseResponse.safeParse(await client.databases.retrieve({ database_id: id }));
@@ -133,4 +147,10 @@ export function createNotionSchemaReader(config: AppConfig["notion"], options: N
       }
     },
   });
+}
+
+// Backwards-compatible metadata reader entry; the application uses the shared client.
+export function createNotionSchemaReader(config: AppConfig["notion"], options: NotionReaderOptions = {}): NotionSchemaReader {
+  const client = createNotionClient(config, options);
+  return Object.freeze({ retrieveDatabase: client.retrieveDatabase, retrieveDataSource: client.retrieveDataSource });
 }
