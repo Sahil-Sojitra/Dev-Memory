@@ -5,8 +5,11 @@ Verification snapshot: 9 November 2026 (Asia/Calcutta).
 
 KAN-6/KAN-7 provide the foundation, configuration, errors, and logging. KAN-8 adds
 read-only Notion metadata resolution and a startup schema gate; live verification
-passed in the user's terminal. MCP entries/tools and Notion
-record operations remain unimplemented. See [schema validation](notion-schema-validation.md).
+passed in the user's terminal. KAN-9 implements local stdio, a shared MCP factory,
+and read-only project listing; the user reports live acceptance at the KAN-10
+handoff. KAN-10 adds digest-authenticated stateless HTTP using that shared factory.
+Hosted verification remains KAN-11 work. See
+[schema validation](notion-schema-validation.md) and [local MCP](local-mcp.md).
 The evidence below records the earlier temporary spike, not a production server.
 
 ## Approved decisions and evidence boundaries
@@ -17,10 +20,10 @@ The evidence below records the earlier temporary spike, not a production server.
 | Notion as the only source of truth | Official Notion SDK with API `2025-09-03` explicitly selected | SDK compatibility and user-run KAN-8 live metadata/schema validation passed; KAN-5 did not connect to Notion |
 | Local MCP over stdio | SDK `serveStdio` entry | Initialization, listing, calling, and stderr logging passed |
 | Remote stateless Streamable HTTP | SDK `createMcpHandler`; Node adapter where needed | Loopback HTTP and actual Antigravity CLI calls passed |
-| Shared services for both transports | Shared business services and tool registration | Test-only factory sharing passed; production services are unimplemented |
-| Static bearer authentication remotely | Authenticate before dispatch; HTTPS when hosted | Missing, invalid, and malformed credentials returned 401 in the spike |
+| Shared services for both transports | Shared business services and tool registration | KAN-10 stdio/HTTP share KAN-9's factory and project service; local contract tests passed |
+| Static bearer authentication remotely | Authenticate before dispatch; HTTPS when hosted | KAN-10 stores current/next SHA-256 digests only and compares two fixed-size buffers with timingSafeEqual; auth failure tests pass |
 | Vercel Hobby as intended host | Function request handler without application-level `listen()` | **Hosted deployment is NOT YET VERIFIED** |
-| Exactly five business tools | Fixed registry below | Business tools are not implemented; spike exposed only `spike_echo` |
+| Exactly five business tools | Fixed registry below | KAN-9 implements only `list_projects`; four remain for later tickets. The earlier spike exposed only `spike_echo` |
 | No additional persistence infrastructure | No separate database, queue, vector database, or embeddings in Phase 1 | None was needed for the spike |
 
 ## Approved business tools
@@ -65,8 +68,10 @@ The official Node adapter can serve a plain Node entry. Vercel's standard
 passed locally.
 
 Production origin/host validation, operation deadlines, credential configuration,
-and deployment configuration still require implementation and review. The spike
-is compatibility evidence, not a finished production server.
+and deployment configuration were open after the spike. KAN-10 now implements
+these HTTP boundaries locally; hosted validation is still open. See
+[HTTP implementation and evidence](http-mcp.md). The spike remains historical
+compatibility evidence rather than hosted deployment evidence.
 
 ## Open hosting gate
 
