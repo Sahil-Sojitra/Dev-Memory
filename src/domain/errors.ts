@@ -1,6 +1,9 @@
 import type { DatabaseKey, SchemaIssue } from "./notion-schema.ts";
 
 export const ERROR_CATALOG = {
+  METHOD_NOT_ALLOWED: { message: "The HTTP method is not supported.", httpStatus: 405, retryable: false },
+  PAYLOAD_TOO_LARGE: { message: "The payload exceeds the size limit.", httpStatus: 413, retryable: false },
+  UNSUPPORTED_MEDIA_TYPE: { message: "The request content type is not supported.", httpStatus: 415, retryable: false },
   SCHEMA_DRIFT: { message: "The Notion schema does not match the approved schema. Check the identified database and property.", httpStatus: 503, retryable: false },
   CONFIGURATION_ERROR: { message: "Application configuration is invalid.", httpStatus: 500, retryable: false },
   VALIDATION_ERROR: { message: "The request is invalid.", httpStatus: 400, retryable: false },
@@ -44,6 +47,22 @@ export interface SafeError {
   readonly correlationId: string;
   readonly database?: DatabaseKey;
   readonly issues?: readonly SchemaIssue[];
+  readonly validation?: readonly ValidationIssue[];
+}
+
+export interface ValidationIssue {
+  readonly field: string;
+  readonly allowedValues?: readonly string[];
+}
+
+export class RequestValidationError extends DomainError {
+  readonly validation: readonly ValidationIssue[];
+
+  constructor(validation: readonly ValidationIssue[]) {
+    super("VALIDATION_ERROR");
+    this.name = "RequestValidationError";
+    this.validation = Object.freeze(validation.map((issue) => Object.freeze({ ...issue })));
+  }
 }
 
 export class SchemaDriftError extends DomainError {
@@ -74,5 +93,6 @@ export function mapError(error: unknown, correlationId: string): SafeError {
     code, ...definition, correlationId,
     ...(error instanceof SchemaDriftError ? { issues: error.issues } : {}),
     ...(error instanceof NotionIntegrationError ? { database: error.database } : {}),
+    ...(error instanceof RequestValidationError ? { validation: error.validation } : {}),
   });
 }
