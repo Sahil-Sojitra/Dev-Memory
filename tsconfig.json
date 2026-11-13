@@ -21,5 +21,5 @@
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "api/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
 }

@@ -14,8 +14,8 @@ function collect(directory) {
     else if (/\.(?:ts|mjs|md)$/.test(entry.name)) files.push(file);
   }
 }
-for (const directory of ["src", "tests", "scripts", "docs"]) collect(path.join(root, directory));
-for (const file of ["README.md", ".gitignore", ".env.example", ".npmrc", ".nvmrc", "package.json", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts"]) {
+for (const directory of ["src", "api", "tests", "scripts", "docs"]) collect(path.join(root, directory));
+for (const file of ["README.md", ".gitignore", ".env.example", ".npmrc", ".nvmrc", "package.json", "tsconfig.json", "tsconfig.build.json", "tsconfig.vercel.json", "vercel.json", "vitest.config.ts"]) {
   files.push(path.join(root, file));
 }
 function fail(file, message) {
@@ -31,7 +31,7 @@ for (const file of files) {
   const relative = path.relative(root, file).replaceAll("\\", "/");
   function visit(node) {
     if (node.kind === ts.SyntaxKind.AnyKeyword) fail(file, "explicit any is forbidden");
-    if (relative.startsWith("src/") && ts.isPropertyAccessExpression(node)) {
+    if ((relative.startsWith("src/") || relative.startsWith("api/")) && ts.isPropertyAccessExpression(node)) {
       if (node.expression.getText(source) === "console") fail(file, "use the structured logger, not console");
       if (node.expression.getText(source) === "process" && node.name.text === "stdout") fail(file, "stdout is reserved for MCP");
     }
@@ -49,7 +49,7 @@ for (const file of files) {
 }
 const template = fs.readFileSync(path.join(root, ".env.example"), "utf8");
 for (const line of template.split(/\r?\n/)) {
-  if (/^(?:NOTION_API|MCP_BEARER_TOKEN)=.+$/.test(line)) fail(".env.example", "credential placeholders must be empty");
+  if (/^(?:NOTION_API|MCP_BEARER_TOKEN(?:_NEXT)?_SHA256)=.+$/.test(line)) fail(".env.example", "credential placeholders must be empty");
 }
 if (failures.length) {
   process.stderr.write(failures.join("\n") + "\n");
