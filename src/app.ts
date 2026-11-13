@@ -4,11 +4,14 @@ import type { Environment } from "./config/environment.ts";
 import { ConfigurationError, mapError } from "./domain/errors.ts";
 import { getCorrelationId, withCorrelationId } from "./observability/context.ts";
 import { createLogger } from "./observability/logger.ts";
-import { createNotionSchemaReader } from "./integrations/notion/client.ts";
+import { createNotionClient } from "./integrations/notion/client.ts";
 import { createNotionSchemaIntegration } from "./services/notion-schema.ts";
 import type { NotionSchemaReader } from "./domain/notion-schema.ts";
+import type { ProjectRepository } from "./domain/projects.ts";
+import { createProjectListingService } from "./services/projects.ts";
+import { createMcpServer } from "./mcp/server.ts";
 
-// Configuration-only helper retained for KAN-6 callers. Entry uses runApplication.
+// Configuration-only helper retained for KAN-6 callers. Stdio uses initializeApplication.
 export function runFoundation(environment: Environment, destination?: DestinationStream): number {
   return withCorrelationId(() => {
     try {
@@ -34,16 +37,22 @@ export function runFoundation(environment: Environment, destination?: Destinatio
 export interface ApplicationOptions {
   readonly destination?: DestinationStream;
   readonly schemaReader?: NotionSchemaReader;
+  readonly projectRepository?: ProjectRepository;
 }
 
 export async function initializeApplication(environment: Environment, options: ApplicationOptions = {}) {
   const config = loadConfig(environment);
   const logger = createLogger({ level: config.logLevel, environment, ...(options.destination ? { destination: options.destination } : {}) });
-  const reader = options.schemaReader ?? createNotionSchemaReader(config.notion);
+  const client = createNotionClient(config.notion);
+  const reader = options.schemaReader ?? client;
   const notion = createNotionSchemaIntegration(config.notion, reader);
   const schemas = await notion.initialize();
   logger.info("notion_schema_validated", { databases: 3, properties: 24 });
-  return Object.freeze({ config, notion, schemas });
+  const repository = options.projectRepository ?? client.createProjectRepository(schemas.projects);
+  const projects = createProjectListingService(repository);
+  return Object.freeze({ config, notion, schemas, logger, projects,
+    createServer: () => createMcpServer({ projects, logger }),
+  });
 }
 
 export async function runApplication(environment: Environment, options: ApplicationOptions = {}): Promise<number> {
