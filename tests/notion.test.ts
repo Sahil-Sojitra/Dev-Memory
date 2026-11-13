@@ -163,10 +163,28 @@ describe("Notion metadata client and lifecycle", () => {
 
   it("enforces the request timeout", async () => {
     vi.useFakeTimers();
-    const reader = createNotionSchemaReader(loadConfig(validEnvironment).notion, { fetch: () => new Promise<Response>(() => {}) });
+    const onMetadataFailure = vi.fn();
+    const reader = createNotionSchemaReader(loadConfig(validEnvironment).notion, { fetch: () => new Promise<Response>(() => {}), onMetadataFailure });
     const promise = reader.retrieveDatabase("projects", databaseIds.projects).catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(NOTION_REQUEST_TIMEOUT_MS + 1);
     expect(await promise).toMatchObject({ code: "TIMEOUT" });
+    expect(onMetadataFailure).toHaveBeenCalledExactlyOnceWith({
+      dependency: "notion", operation: "retrieve_database", database: "projects", code: "TIMEOUT",
+      category: "request_timeout", upstreamCode: "notionhq_client_request_timeout",
+    });
+  });
+
+  it("does not copy arbitrary transport codes or let diagnostics replace the failure", async () => {
+    const onMetadataFailure = vi.fn(() => { throw new Error("diagnostic failure"); });
+    const reader = createNotionSchemaReader(loadConfig(validEnvironment).notion, {
+      fetch: async () => { throw Object.assign(new Error("private response " + FAKE_NOTION_TOKEN), { code: FAKE_NOTION_TOKEN }); },
+      onMetadataFailure,
+    });
+    await expect(reader.retrieveDataSource("subprojects", sourceIds.subprojects)).rejects.toMatchObject({ code: "DEPENDENCY_UNAVAILABLE", database: "subprojects" });
+    expect(onMetadataFailure).toHaveBeenCalledExactlyOnceWith({
+      dependency: "notion", operation: "retrieve_data_source", database: "subprojects", code: "DEPENDENCY_UNAVAILABLE", category: "application_or_transport",
+    });
+    expect(JSON.stringify(onMetadataFailure.mock.calls)).not.toContain(FAKE_NOTION_TOKEN);
   });
 
   it("rejects partial/malformed metadata without echoing its payload", async () => {

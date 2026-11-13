@@ -6,7 +6,7 @@ import { loadConfig } from "../src/config/environment.ts";
 import type { Environment } from "../src/config/environment.ts";
 import type { ProjectRepository } from "../src/domain/projects.ts";
 import { FAKE_BEARER_SHA256, FAKE_BEARER_TOKEN, FAKE_NEXT_SHA256, FAKE_NEXT_TOKEN, FAKE_NOTION_TOKEN, validHttpEnvironment } from "./fixtures/environment.ts";
-import { createFixtureApi } from "./fixtures/notion.ts";
+import { createFixtureApi, databaseIds, sourceIds } from "./fixtures/notion.ts";
 import { inMemoryProjects, project } from "./fixtures/projects.ts";
 import type { WireReply } from "./fixtures/mcp.ts";
 
@@ -310,6 +310,50 @@ describe("HTTP security limits and lifecycle", () => {
 });
 
 describe("liveness and readiness", () => {
+  it.each([
+    ["credentials", 401, "unauthorized", "UNAUTHORIZED", "retrieve_database", "http_response"],
+    ["permissions", 403, "restricted_resource", "FORBIDDEN", "retrieve_data_source", "http_response"],
+    ["unavailable database", 404, "object_not_found", "NOT_FOUND", "retrieve_database", "http_response"],
+    ["API validation", 400, "validation_error", "VALIDATION_ERROR", "retrieve_database", "http_response"],
+    ["rate limit", 429, "rate_limited", "RATE_LIMITED", "retrieve_database", "http_response"],
+    ["upstream outage", 503, "service_unavailable", "DEPENDENCY_UNAVAILABLE", "retrieve_data_source", "http_response"],
+    ["DNS failure", 0, "ENOTFOUND", "DEPENDENCY_UNAVAILABLE", "retrieve_database", "network"],
+    ["malformed JSON", 200, "invalid_json", "DEPENDENCY_UNAVAILABLE", "retrieve_data_source", "invalid_response"],
+  ] as const)("diagnoses %s before readiness error conversion without leaking request data", async (_scenario, status, upstreamCode, code, operation, category) => {
+    const api = createFixtureApi();
+    const logs: string[] = [];
+    const target = operation === "retrieve_database" ? "/databases/" + databaseIds.knowledge : "/data_sources/" + sourceIds.knowledge;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      expect(init?.method ?? "GET").toBe("GET");
+      if (!url.endsWith(target)) return api.fetch(input, init);
+      if (status === 0) throw new TypeError("private " + FAKE_NOTION_TOKEN, { cause: Object.assign(new Error("private DNS details"), { code: upstreamCode }) });
+      if (status === 200) return new Response("private invalid JSON " + FAKE_BEARER_TOKEN, { status });
+      return Response.json({ object: "error", status, code: upstreamCode, message: "private " + FAKE_NOTION_TOKEN }, {
+        status, headers: { "retry-after": "0", "x-private": FAKE_BEARER_TOKEN },
+      });
+    });
+    const application = createHttpApplication(() => validHttpEnvironment, { destination: { write(line: string) { logs.push(line); } } });
+    const response = await application.fetch(request(undefined, { path: "/api/ready", method: "GET" }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ status: "not_ready" });
+    const records = logs.map((line) => JSON.parse(line));
+    const failure = records.find((record) => record.msg === "notion_metadata_failed");
+    expect(failure).toMatchObject({ dependency: "notion", database: "knowledge", operation, code, category });
+    if (category === "http_response") expect(failure).toMatchObject({ upstreamStatus: status, upstreamCode });
+    if (category === "network") expect(failure.networkCode).toBe("ENOTFOUND");
+    expect(records.find((record) => record.msg === "application_initialization_failed")).toMatchObject({ phase: "notion_schema", error: { code } });
+    expect(records.find((record) => record.msg === "http_initialization_failed")).toMatchObject({ error: { code } });
+    expect(records.find((record) => record.msg === "http_request_failed")).toMatchObject({ error: { code: "DEPENDENCY_UNAVAILABLE" } });
+    expect(failure.correlationId).toBe(response.headers.get("x-correlation-id"));
+    expect(Object.keys(failure).sort()).toEqual([
+      "category", "code", "correlationId", "database", "dependency", "level", "msg", "operation", "service", "time",
+      ...(category === "http_response" ? ["upstreamCode", "upstreamStatus"] : []), ...(category === "network" ? ["networkCode"] : []),
+    ].sort());
+    for (const forbidden of [FAKE_NOTION_TOKEN, FAKE_BEARER_TOKEN, FAKE_BEARER_SHA256, "private", ...Object.values(databaseIds), ...Object.values(sourceIds)]) {
+      expect(logs.join("")).not.toContain(forbidden);
+    }
+  });
   it("answers health without environment validation or Notion reads", async () => {
     const environment = vi.fn(() => { throw new Error("Must not read configuration"); });
     const application = createHttpApplication(environment);
@@ -332,13 +376,17 @@ describe("liveness and readiness", () => {
     vi.useFakeTimers();
     const { application: invalid } = setup({});
     expect(await (await invalid.fetch(request(undefined, { path: "/api/ready", method: "GET" }))).json()).toEqual({ status: "not_ready" });
-    const { application, api } = setup();
+    const { application, api, logs } = setup();
     const original = api.fixtures.schemas.projects.properties.Name!;
     delete api.fixtures.schemas.projects.properties.Name;
     expect((await application.fetch(request(undefined, { path: "/api/ready", method: "GET" }))).status).toBe(503);
     api.fixtures.schemas.projects.properties.Name = original;
     expect((await application.fetch(request(undefined, { path: "/api/ready", method: "GET" }))).status).toBe(503);
     expect(api.requests).toHaveLength(6);
+    expect(logs.map((line) => JSON.parse(line)).find((record) => record.msg === "application_initialization_failed")).toMatchObject({
+      phase: "notion_schema", error: { code: "SCHEMA_DRIFT", issues: [{ database: "projects", property: "Name", reason: "MISSING_PROPERTY" }] },
+    });
+    expect(logs.map((line) => JSON.parse(line)).filter((record) => record.msg === "http_initialization_cooldown")).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(HTTP_INITIALIZATION_RETRY_MS);
     expect((await application.fetch(request(undefined, { path: "/api/ready", method: "GET" }))).status).toBe(200);
     expect(api.requests).toHaveLength(12);

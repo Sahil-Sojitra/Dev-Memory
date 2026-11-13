@@ -1,4 +1,4 @@
-import { Client, isHTTPResponseError, isNotionClientError } from "@notionhq/client";
+import { APIErrorCode, ClientErrorCode, Client, isHTTPResponseError, isNotionClientError } from "@notionhq/client";
 import * as z from "zod";
 import type { AppConfig } from "../../config/environment.ts";
 import { DomainError, NotionIntegrationError, SchemaDriftError } from "../../domain/errors.ts";
@@ -62,6 +62,45 @@ function mapClientError(error: unknown, database: DatabaseKey): DomainError {
 
 export interface NotionReaderOptions {
   readonly fetch?: typeof globalThis.fetch;
+  readonly onMetadataFailure?: (failure: NotionMetadataFailure) => void;
+}
+
+export interface NotionMetadataFailure {
+  readonly dependency: "notion";
+  readonly operation: "retrieve_database" | "retrieve_data_source";
+  readonly database: DatabaseKey;
+  readonly code: ErrorCode;
+  readonly category: "http_response" | "request_timeout" | "network" | "invalid_response" | "schema_validation" | "application_or_transport";
+  readonly upstreamStatus?: number;
+  readonly upstreamCode?: string;
+  readonly networkCode?: string;
+}
+
+const upstreamCodes = new Set<string>([...Object.values(APIErrorCode), ...Object.values(ClientErrorCode)]);
+const networkCodes = new Set<string>([
+  "ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENETUNREACH", "EHOSTUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_SOCKET", "CERT_HAS_EXPIRED",
+  "DEPTH_ZERO_SELF_SIGNED_CERT", "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+]);
+
+function metadataFailure(error: unknown, database: DatabaseKey, operation: NotionMetadataFailure["operation"], mapped: DomainError): NotionMetadataFailure {
+  let networkCode: string | undefined;
+  let candidate: unknown = error;
+  for (let depth = 0; depth < 3 && candidate instanceof Error; depth++) {
+    const code = Object.getOwnPropertyDescriptor(candidate, "code")?.value as unknown;
+    if (typeof code === "string" && networkCodes.has(code)) { networkCode = code; break; }
+    candidate = Object.getOwnPropertyDescriptor(candidate, "cause")?.value as unknown;
+  }
+  const http = isHTTPResponseError(error);
+  const upstreamCode = isNotionClientError(error) && upstreamCodes.has(error.code) ? error.code : undefined;
+  return Object.freeze({
+    dependency: "notion", operation, database, code: mapped.code,
+    category: http ? "http_response" : upstreamCode === "notionhq_client_request_timeout" ? "request_timeout"
+      : networkCode ? "network" : error instanceof SyntaxError ? "invalid_response"
+        : error instanceof SchemaDriftError ? "schema_validation" : "application_or_transport",
+    ...(http && Number.isInteger(error.status) && error.status >= 100 && error.status <= 599 ? { upstreamStatus: error.status } : {}),
+    ...(upstreamCode ? { upstreamCode } : {}), ...(networkCode ? { networkCode } : {}),
+  });
 }
 
 export interface NotionClient extends NotionSchemaReader {
@@ -97,6 +136,15 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
     logger: () => { /* SDK payload logging is deliberately disabled. */ },
   });
 
+  function metadataError(error: unknown, database: DatabaseKey, operation: NotionMetadataFailure["operation"]): DomainError {
+    const mapped = mapClientError(error, database);
+    // Diagnostic callbacks receive only projected constants/codes, never SDK
+    // errors, request URLs, IDs, headers, messages, response bodies or causes.
+    try { options.onMetadataFailure?.(metadataFailure(error, database, operation, mapped)); }
+    catch { /* Diagnostics must not replace the original failure or affect retries. */ }
+    return mapped;
+  }
+
   return Object.freeze({
     createProjectRepository(schema: ValidatedDatabase) {
       if (schema.databaseId !== config.databases.projects) throw new DomainError("FORBIDDEN");
@@ -109,7 +157,7 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
         if (!parsed.success) return invalidMetadata(database);
         return Object.freeze({ id: parsed.data.id, dataSourceIds: Object.freeze(parsed.data.data_sources.map((source) => source.id)) });
       } catch (error) {
-        throw mapClientError(error, database);
+        throw metadataError(error, database, "retrieve_database");
       }
     },
     async retrieveDataSource(database: DatabaseKey, id: string) {
@@ -143,7 +191,7 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
         }
         return Object.freeze({ id: parsed.data.id, databaseId: parsed.data.parent.database_id, properties: Object.freeze(properties) });
       } catch (error) {
-        throw mapClientError(error, database);
+        throw metadataError(error, database, "retrieve_data_source");
       }
     },
   });

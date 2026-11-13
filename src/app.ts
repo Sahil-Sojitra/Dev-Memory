@@ -43,16 +43,26 @@ export interface ApplicationOptions {
 export async function initializeApplication(environment: Environment, options: ApplicationOptions = {}) {
   const config = loadConfig(environment);
   const logger = createLogger({ level: config.logLevel, environment, ...(options.destination ? { destination: options.destination } : {}) });
-  const client = createNotionClient(config.notion);
-  const reader = options.schemaReader ?? client;
-  const notion = createNotionSchemaIntegration(config.notion, reader);
-  const schemas = await notion.initialize();
-  logger.info("notion_schema_validated", { databases: 3, properties: 24 });
-  const repository = options.projectRepository ?? client.createProjectRepository(schemas.projects);
-  const projects = createProjectListingService(repository);
-  return Object.freeze({ config, notion, schemas, logger, projects,
-    createServer: () => createMcpServer({ projects, logger }),
-  });
+  let phase: "notion_client" | "notion_schema" | "project_services" = "notion_client";
+  try {
+    const client = createNotionClient(config.notion, {
+      onMetadataFailure: (failure) => logger.error("notion_metadata_failed", { ...failure }),
+    });
+    const reader = options.schemaReader ?? client;
+    const notion = createNotionSchemaIntegration(config.notion, reader);
+    phase = "notion_schema";
+    const schemas = await notion.initialize();
+    logger.info("notion_schema_validated", { databases: 3, properties: 24 });
+    phase = "project_services";
+    const repository = options.projectRepository ?? client.createProjectRepository(schemas.projects);
+    const projects = createProjectListingService(repository);
+    return Object.freeze({ config, notion, schemas, logger, projects,
+      createServer: () => createMcpServer({ projects, logger }),
+    });
+  } catch (error) {
+    logger.error("application_initialization_failed", { phase, error: mapError(error, getCorrelationId() ?? "unavailable") });
+    throw error;
+  }
 }
 
 export async function runApplication(environment: Environment, options: ApplicationOptions = {}): Promise<number> {

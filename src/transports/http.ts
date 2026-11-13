@@ -8,6 +8,7 @@ import { ConfigurationError, DomainError, mapError } from "../domain/errors.ts";
 import type { ErrorCode } from "../domain/errors.ts";
 import { getCorrelationId, withCorrelationId } from "../observability/context.ts";
 import { createLogger } from "../observability/logger.ts";
+import type { AppLogger } from "../observability/logger.ts";
 import { createRedactor } from "../observability/redaction.ts";
 import { createBearerVerifier, unauthorizedResponse } from "./bearer.ts";
 
@@ -100,9 +101,12 @@ function redactProtocolErrors(bytes: Uint8Array<ArrayBuffer>, contentType: strin
 export function createHttpApplication(environment: () => Environment = () => process.env, options: ApplicationOptions = {}) {
   let application: Promise<Application> | undefined;
   let retryAfter = 0;
-  function initialized(snapshot: Environment): Promise<Application> {
+  function initialized(snapshot: Environment, logger: AppLogger): Promise<Application> {
     if (!application) {
-      if (Date.now() < retryAfter) return Promise.reject(new DomainError("DEPENDENCY_UNAVAILABLE"));
+      if (Date.now() < retryAfter) {
+        logger.warn("http_initialization_cooldown", { retryInMs: retryAfter - Date.now() });
+        return Promise.reject(new DomainError("DEPENDENCY_UNAVAILABLE"));
+      }
       const attempt = initializeApplication(snapshot, options);
       application = attempt;
       void attempt.catch(() => {
@@ -155,7 +159,7 @@ export function createHttpApplication(environment: () => Environment = () => pro
       const timer = setTimeout(() => controller.abort(), HTTP_REQUEST_TIMEOUT_MS);
       timer.unref();
       async function readyServices(): Promise<Application> {
-        try { return await waitFor(initialized(snapshot), controller.signal); }
+        try { return await waitFor(initialized(snapshot, logger), controller.signal); }
         catch (error) {
           logger.error("http_initialization_failed", { error: mapError(error, getCorrelationId() ?? "unavailable") });
           throw new DomainError(error instanceof DomainError && error.code === "TIMEOUT" ? "TIMEOUT" : "DEPENDENCY_UNAVAILABLE");
