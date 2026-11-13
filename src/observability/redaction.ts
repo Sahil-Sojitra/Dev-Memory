@@ -5,7 +5,7 @@ export const REDACTED = "[REDACTED]";
 
 function isSensitiveKey(key: string): boolean {
   const normalized = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
-  return /authorization|token|secret|password|passwd|apikey|credential|cookie|privatekey|stack|cause/.test(normalized)
+  return /authorization|token|digest|secret|password|passwd|apikey|credential|cookie|privatekey|stack|cause/.test(normalized)
     || /^(auth|env|environment|config|notionapi)$/.test(normalized);
 }
 
