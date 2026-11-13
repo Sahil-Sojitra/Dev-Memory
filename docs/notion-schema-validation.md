@@ -73,14 +73,15 @@ A new application instance revalidates the live schema.
 
 The adapter uses a 10-second request timeout and at most two SDK retries, with
 100 ms initial / 500 ms maximum retry delay. SDK payload logging is disabled.
-Only GET requests to the official database/data-source metadata endpoints are
-allowed, and redirects are rejected. Public interfaces expose application-owned
-metadata and validated property IDs, never SDK objects, record contents or write
-capabilities.
+KAN-8 allowed only metadata GETs and rejected redirects. KAN-9 extends that
+same client with bounded, read-only Projects queries (POST /query), mapping
+records to application-owned DTOs. Public interfaces never expose SDK objects
+or write capabilities. The metadata-only reader retains its original surface.
 
 The validated application context exposes cached schemas and an initialization
-interface for future services. There are no MCP tools, listeners, REST routes,
-record queries, or record write operations in this ticket.
+interface for services. KAN-8 introduced no MCP tools, listeners, REST routes,
+record queries, or record write operations. KAN-9 adds the stdio server and
+read-only project listing; see [its contract and evidence](local-mcp.md).
 
 ## Approved map from KAN-3
 

@@ -31,7 +31,7 @@ describe("foundation bootstrap", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toBe("");
     expect(result.stderr).toContain("notion_schema_validated");
-    expect(result.stderr).toContain("application_ready");
+    expect(result.stderr).toContain("stdio_ready");
     expect(result.stderr).not.toContain(FAKE_NOTION_TOKEN);
   });
 });
