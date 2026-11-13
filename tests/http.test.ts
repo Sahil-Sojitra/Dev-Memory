@@ -92,6 +92,39 @@ describe("HTTP authentication boundary", () => {
       expect(api.requests).toHaveLength(0);
     }
   });
+  it("logs configuration names and codes privately while preserving safe HTTP responses", async () => {
+    const { application, api, list, logs } = setup({
+      ...validHttpEnvironment, MCP_BEARER_TOKEN: FAKE_BEARER_TOKEN,
+      MCP_BEARER_TOKEN_NEXT_SHA256: "", NOTION_API: "synthetic invalid token",
+    });
+    const response = await application.fetch(new Request("https://memory.example.test/api/mcp"));
+    expect(response.status).toBe(503);
+    const body = await response.text();
+    expect(body).toContain("CONFIGURATION_ERROR");
+    const record = JSON.parse(logs[0]!) as { msg: string; invalidFields: string[]; configurationIssues: { field: string; code: string }[] };
+    expect(record.msg).toBe("http_configuration_failed");
+    expect(record.invalidFields).toEqual(expect.arrayContaining(["MCP_BEARER_TOKEN", "MCP_BEARER_TOKEN_NEXT_SHA256", "NOTION_API"]));
+    expect(record.configurationIssues).toEqual(expect.arrayContaining([
+      { field: "MCP_BEARER_TOKEN", code: "invalid_type" },
+      { field: "MCP_BEARER_TOKEN_NEXT_SHA256", code: "invalid_format" },
+      { field: "NOTION_API", code: "invalid_format" },
+    ]));
+    for (const issue of record.configurationIssues) expect(Object.keys(issue).sort()).toEqual(["code", "field"]);
+    for (const secret of [FAKE_BEARER_TOKEN, FAKE_BEARER_SHA256, FAKE_NOTION_TOKEN, "synthetic invalid token"]) expect(logs.join("") + body).not.toContain(secret);
+    expect(body).not.toContain("invalidFields");
+    expect(body).not.toContain("configurationIssues");
+    const ready = await application.fetch(new Request("https://memory.example.test/api/ready"));
+    expect(ready.status).toBe(503);
+    expect(await ready.json()).toEqual({ status: "not_ready" });
+    expect(api.requests).toHaveLength(0);
+    expect(list).not.toHaveBeenCalled();
+  });
+  it("diagnoses an omitted HTTP transport without initializing Notion", async () => {
+    const { application, api, logs } = setup({ ...validHttpEnvironment, MCP_TRANSPORT: undefined });
+    expect((await application.fetch(new Request("https://memory.example.test/api/mcp"))).status).toBe(503);
+    expect(JSON.parse(logs[0]!).configurationIssues).toEqual([{ field: "MCP_TRANSPORT", code: "http_transport_required" }]);
+    expect(api.requests).toHaveLength(0);
+  });
 });
 
 describe("stateless Streamable HTTP protocol", () => {

@@ -29,13 +29,21 @@ export class DomainError extends Error {
   }
 }
 
+export interface ConfigurationIssue {
+  readonly field: string;
+  readonly code: string;
+}
+
 export class ConfigurationError extends DomainError {
   readonly invalidFields: readonly string[];
+  readonly configurationIssues: readonly ConfigurationIssue[];
 
-  constructor(invalidFields: readonly string[]) {
+  constructor(invalidFields: readonly string[], issues: readonly ConfigurationIssue[] = []) {
     super("CONFIGURATION_ERROR");
     this.name = "ConfigurationError";
     this.invalidFields = Object.freeze([...new Set(invalidFields)]);
+    // Retain only application field names and validator codes, never raw issues.
+    this.configurationIssues = Object.freeze(issues.map(({ field, code }) => Object.freeze({ field, code })));
   }
 }
 

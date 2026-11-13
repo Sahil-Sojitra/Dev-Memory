@@ -129,13 +129,15 @@ export function createHttpApplication(environment: () => Environment = () => pro
       try {
         snapshot = Object.freeze({ ...environment() });
         const loaded = loadConfig(snapshot);
-        if (loaded.transport !== "http") throw new ConfigurationError(["MCP_TRANSPORT"]);
+        if (loaded.transport !== "http") throw new ConfigurationError(["MCP_TRANSPORT"], [{ field: "MCP_TRANSPORT", code: "http_transport_required" }]);
         config = loaded;
       } catch (error) {
         const logger = createLogger({ environment: {}, ...(options.destination ? { destination: options.destination } : {}) });
         logger.error("http_configuration_failed", {
           error: mapError(error, getCorrelationId() ?? "unavailable"),
-          ...(error instanceof ConfigurationError ? { invalidFields: error.invalidFields } : {}),
+          ...(error instanceof ConfigurationError ? {
+            invalidFields: error.invalidFields, configurationIssues: error.configurationIssues,
+          } : {}),
         });
         return path === "/api/ready" ? notReady() : errorResponse("CONFIGURATION_ERROR", 503);
       }

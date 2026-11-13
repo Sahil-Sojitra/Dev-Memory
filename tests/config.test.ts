@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/environment.ts";
 import { ConfigurationError } from "../src/domain/errors.ts";
-import { FAKE_BEARER_SHA256, FAKE_NOTION_TOKEN, validEnvironment } from "./fixtures/environment.ts";
+import { FAKE_BEARER_SHA256, FAKE_NOTION_TOKEN, validEnvironment, validHttpEnvironment } from "./fixtures/environment.ts";
 
 describe("environment validation", () => {
   it("defaults to stdio without remote credentials and does not mutate input", () => {
@@ -59,6 +59,36 @@ describe("environment validation", () => {
     ["origin path", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN_SHA256: FAKE_BEARER_SHA256, MCP_PUBLIC_URL: "https://memory.example.test/mcp", MCP_ALLOWED_ORIGINS: "https://client.example.test/path" }],
   ])("rejects %s", (_name, overrides) => {
     expect(() => loadConfig({ ...validEnvironment, ...overrides })).toThrow(ConfigurationError);
+  });
+
+  it.each([
+    ["NOTION_API", undefined, "invalid_type"],
+    ["NOTION_API", "", "too_small"],
+    ["NOTION_API", "synthetic whitespace token", "invalid_format"],
+    ["MCP_BEARER_TOKEN", "synthetic-legacy-value", "invalid_type"],
+    ["MCP_BEARER_TOKEN_SHA256", "synthetic-invalid-digest", "invalid_format"],
+    ["MCP_BEARER_TOKEN_NEXT_SHA256", "", "invalid_format"],
+    ["NOTION_PROJECTS_DATABASE_ID", "synthetic-invalid-id", "invalid_format"],
+    ["NOTION_API_VERSION", "synthetic-wrong-version", "invalid_value"],
+    ["MCP_PUBLIC_URL", "http://synthetic.example.test/api/mcp", "custom"],
+    ["MCP_ALLOWED_ORIGINS", "https://synthetic.example.test/path", "custom"],
+    ["NOTION_SUBPROJECTS_DATABASE_ID", validEnvironment.NOTION_PROJECTS_DATABASE_ID, "custom"],
+    ["MCP_BEARER_TOKEN_SHA256", createHash("sha256").update(FAKE_NOTION_TOKEN).digest("hex"), "custom"],
+  ] as const)("retains only safe issue metadata for %s", (field, value, code) => {
+    try {
+      loadConfig({ ...validHttpEnvironment, [field]: value });
+      throw new Error("Expected configuration rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationError);
+      const issues = (error as ConfigurationError).configurationIssues;
+      const reportedField = field === "NOTION_SUBPROJECTS_DATABASE_ID" ? "NOTION_PROJECTS_DATABASE_ID" : field;
+      expect(issues).toContainEqual({ field: reportedField, code });
+      for (const issue of issues) expect(Object.keys(issue).sort()).toEqual(["code", "field"]);
+      const serialized = JSON.stringify(error);
+      expect(serialized).not.toContain(FAKE_NOTION_TOKEN);
+      expect(serialized).not.toContain(FAKE_BEARER_SHA256);
+      if (value) expect(serialized).not.toContain(value);
+    }
   });
 
   it("reports only field names, never invalid input values or Zod input", () => {

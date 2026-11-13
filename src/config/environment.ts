@@ -90,8 +90,12 @@ export type AppConfig = Readonly<CommonConfig & (
 export function loadConfig(environment: Environment = process.env): AppConfig {
   const result = schema.safeParse({ ...environment, MCP_TRANSPORT: environment.MCP_TRANSPORT ?? "stdio" });
   if (!result.success) {
-    // Do not retain Zod input, issue messages, or the raw environment in the error.
-    throw new ConfigurationError(result.error.issues.map((issue) => String(issue.path[0] ?? "CONFIGURATION")));
+    // Project only fixed schema field names and validator codes. Never retain
+    // issue messages, input, expected values, patterns, or the raw environment.
+    const issues = result.error.issues.map((issue) => ({
+      field: String(issue.path[0] ?? "CONFIGURATION"), code: issue.code,
+    }));
+    throw new ConfigurationError(issues.map((issue) => issue.field), issues);
   }
   const value = result.data;
   const shared = {

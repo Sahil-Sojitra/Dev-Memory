@@ -21,6 +21,11 @@ describe("safe domain error mapping", () => {
   });
 
   it("does not expose configuration fields in public errors", () => {
-    expect(mapError(new ConfigurationError(["NOTION_API"]), "test-correlation")).not.toHaveProperty("invalidFields");
+    const error = new ConfigurationError(["NOTION_API"], [{ field: "NOTION_API", code: "invalid_type" }]);
+    const mapped = mapError(error, "test-correlation");
+    expect(mapped).not.toHaveProperty("invalidFields");
+    expect(mapped).not.toHaveProperty("configurationIssues");
+    expect(Object.isFrozen(error.configurationIssues)).toBe(true);
+    expect(Object.isFrozen(error.configurationIssues[0])).toBe(true);
   });
 });
