@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config/environment.ts";
 import { ConfigurationError } from "../src/domain/errors.ts";
-import { FAKE_BEARER_TOKEN, FAKE_NOTION_TOKEN, validEnvironment } from "./fixtures/environment.ts";
+import { FAKE_BEARER_SHA256, FAKE_NOTION_TOKEN, validEnvironment } from "./fixtures/environment.ts";
 
 describe("environment validation", () => {
   it("defaults to stdio without remote credentials and does not mutate input", () => {
@@ -22,19 +23,19 @@ describe("environment validation", () => {
 
   it("validates remote configuration, derives hosts and deduplicates HTTPS origins", () => {
     const config = loadConfig({
-      ...validEnvironment, MCP_TRANSPORT: "http", MCP_BEARER_TOKEN: FAKE_BEARER_TOKEN,
+      ...validEnvironment, MCP_TRANSPORT: "http", MCP_BEARER_TOKEN_SHA256: FAKE_BEARER_SHA256,
       MCP_PUBLIC_URL: "https://memory.example.test/mcp",
       MCP_ALLOWED_ORIGINS: "https://client.example.test, https://client.example.test/",
     });
     expect(config.transport).toBe("http");
     if (config.transport !== "http") throw new Error("Expected HTTP configuration");
-    expect(config.http.bearerToken).toBe(FAKE_BEARER_TOKEN);
+    expect(config.http.bearerTokenSha256).toBe(FAKE_BEARER_SHA256);
     expect(config.http.allowedHosts).toEqual(["memory.example.test"]);
     expect(config.http.allowedOrigins).toEqual(["https://client.example.test"]);
   });
 
   it("does not require browser origins for non-browser remote clients", () => {
-    const config = loadConfig({ ...validEnvironment, MCP_TRANSPORT: "http", MCP_BEARER_TOKEN: FAKE_BEARER_TOKEN, MCP_PUBLIC_URL: "https://memory.example.test/mcp" });
+    const config = loadConfig({ ...validEnvironment, MCP_TRANSPORT: "http", MCP_BEARER_TOKEN_SHA256: FAKE_BEARER_SHA256, MCP_PUBLIC_URL: "https://memory.example.test/mcp" });
     expect(config.transport === "http" && config.http.allowedOrigins).toEqual([]);
   });
 
@@ -51,11 +52,11 @@ describe("environment validation", () => {
     ["bad log level", { LOG_LEVEL: "verbose" }],
     ["bad node environment", { NODE_ENV: "staging" }],
     ["missing HTTP credentials", { MCP_TRANSPORT: "http" }],
-    ["short bearer", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN: "short", MCP_PUBLIC_URL: "https://memory.example.test/mcp" }],
-    ["reused Notion token", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN: FAKE_NOTION_TOKEN, MCP_PUBLIC_URL: "https://memory.example.test/mcp" }],
-    ["insecure HTTP URL", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN: FAKE_BEARER_TOKEN, MCP_PUBLIC_URL: "http://memory.example.test/mcp" }],
-    ["URL credentials", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN: FAKE_BEARER_TOKEN, MCP_PUBLIC_URL: "https://user:password@memory.example.test/mcp" }],
-    ["origin path", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN: FAKE_BEARER_TOKEN, MCP_PUBLIC_URL: "https://memory.example.test/mcp", MCP_ALLOWED_ORIGINS: "https://client.example.test/path" }],
+    ["legacy plaintext bearer", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN: "short", MCP_PUBLIC_URL: "https://memory.example.test/mcp" }],
+    ["reused Notion token", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN_SHA256: createHash("sha256").update(FAKE_NOTION_TOKEN).digest("hex"), MCP_PUBLIC_URL: "https://memory.example.test/mcp" }],
+    ["insecure HTTP URL", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN_SHA256: FAKE_BEARER_SHA256, MCP_PUBLIC_URL: "http://memory.example.test/mcp" }],
+    ["URL credentials", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN_SHA256: FAKE_BEARER_SHA256, MCP_PUBLIC_URL: "https://user:password@memory.example.test/mcp" }],
+    ["origin path", { MCP_TRANSPORT: "http", MCP_BEARER_TOKEN_SHA256: FAKE_BEARER_SHA256, MCP_PUBLIC_URL: "https://memory.example.test/mcp", MCP_ALLOWED_ORIGINS: "https://client.example.test/path" }],
   ])("rejects %s", (_name, overrides) => {
     expect(() => loadConfig({ ...validEnvironment, ...overrides })).toThrow(ConfigurationError);
   });

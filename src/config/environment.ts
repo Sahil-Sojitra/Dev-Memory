@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { ConfigurationError } from "../domain/errors.ts";
 
 export type Environment = Readonly<Record<string, string | undefined>>;
@@ -7,6 +8,7 @@ const nonWhitespaceSecret = z.string().min(1).regex(/^\S+$/);
 const nodeEnv = z.enum(["development", "test", "production"]);
 const logLevel = z.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"]);
 const notionId = z.uuid().transform((value) => value.toLowerCase());
+const sha256Digest = z.string().regex(/^[0-9a-fA-F]{64}$/).transform((value) => value.toLowerCase());
 
 const httpsEndpoint = z.string().url().refine((value) => {
   const url = new URL(value);
@@ -39,7 +41,10 @@ const schema = z.discriminatedUnion("MCP_TRANSPORT", [
   common.extend({ MCP_TRANSPORT: z.literal("stdio") }),
   common.extend({
     MCP_TRANSPORT: z.literal("http"),
-    MCP_BEARER_TOKEN: nonWhitespaceSecret.min(32),
+    MCP_BEARER_TOKEN_SHA256: sha256Digest,
+    MCP_BEARER_TOKEN_NEXT_SHA256: sha256Digest.optional(),
+    // A remote server must never retain a configured plaintext bearer token.
+    MCP_BEARER_TOKEN: z.never().optional(),
     MCP_PUBLIC_URL: httpsEndpoint,
     MCP_ALLOWED_ORIGINS: origins,
   }),
@@ -48,8 +53,14 @@ const schema = z.discriminatedUnion("MCP_TRANSPORT", [
   if (new Set(fields.map((field) => value[field])).size !== fields.length) {
     context.addIssue({ code: "custom", path: ["NOTION_PROJECTS_DATABASE_ID"], message: "Databases must be distinct." });
   }
-  if (value.MCP_TRANSPORT === "http" && value.MCP_BEARER_TOKEN === value.NOTION_API) {
-    context.addIssue({ code: "custom", path: ["MCP_BEARER_TOKEN"], message: "Separate credentials are required." });
+  if (value.MCP_TRANSPORT === "http") {
+    const notionDigest = createHash("sha256").update(value.NOTION_API).digest();
+    for (const field of ["MCP_BEARER_TOKEN_SHA256", "MCP_BEARER_TOKEN_NEXT_SHA256"] as const) {
+      const digest = value[field];
+      if (digest && /^[0-9a-f]{64}$/.test(digest) && timingSafeEqual(notionDigest, Buffer.from(digest, "hex"))) {
+        context.addIssue({ code: "custom", path: [field], message: "Separate credentials are required." });
+      }
+    }
   }
 });
 
@@ -67,7 +78,8 @@ interface CommonConfig {
 export type AppConfig = Readonly<CommonConfig & (
   { readonly transport: "stdio" } |
   { readonly transport: "http"; readonly http: Readonly<{
-    bearerToken: string;
+    bearerTokenSha256: string;
+    nextBearerTokenSha256: string | undefined;
     publicUrl: string;
     allowedHosts: readonly string[];
     allowedOrigins: readonly string[];
@@ -105,7 +117,8 @@ export function loadConfig(environment: Environment = process.env): AppConfig {
     ...shared,
     transport: "http",
     http: Object.freeze({
-      bearerToken: value.MCP_BEARER_TOKEN,
+      bearerTokenSha256: value.MCP_BEARER_TOKEN_SHA256,
+      nextBearerTokenSha256: value.MCP_BEARER_TOKEN_NEXT_SHA256,
       publicUrl: value.MCP_PUBLIC_URL,
       allowedHosts: Object.freeze([new URL(value.MCP_PUBLIC_URL).host]),
       allowedOrigins: Object.freeze(value.MCP_ALLOWED_ORIGINS),
