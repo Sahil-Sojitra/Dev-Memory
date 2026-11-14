@@ -17,6 +17,8 @@ import type { KnowledgeEntryRepository } from "../../domain/knowledge-entry.ts";
 import { createNotionKnowledgeEntryRepository } from "./knowledge-entry.ts";
 import type { CaptureWriter } from "../../domain/capture-knowledge.ts";
 import { createNotionCaptureWriter } from "./capture-knowledge.ts";
+import type { SearchRepository } from "../../domain/search-knowledge.ts";
+import { createNotionSearchRepository } from "./search-knowledge.ts";
 
 export const NOTION_REQUEST_TIMEOUT_MS = 10_000;
 type SdkFetch = NonNullable<NonNullable<ConstructorParameters<typeof Client>[0]>["fetch"]>;
@@ -117,6 +119,7 @@ export interface NotionClient extends NotionSchemaReader {
   createContextRepository(schemas: ValidatedSchema): ProjectContextRepository;
   createKnowledgeEntryRepository(schema: ValidatedDatabase): KnowledgeEntryRepository;
   createCaptureWriter(schemas: ValidatedSchema): CaptureWriter;
+  createSearchRepository(schema: ValidatedDatabase): SearchRepository;
 }
 
 export function createNotionClient(config: AppConfig["notion"], options: NotionReaderOptions = {}): NotionClient {
@@ -200,6 +203,12 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
   }
 
   return Object.freeze({
+    createSearchRepository(schema: ValidatedDatabase) {
+      if (schema.databaseId !== config.databases.knowledge) throw new DomainError("FORBIDDEN");
+      contextSources.add(schema.dataSourceId);
+      return createNotionSearchRepository(client, schema, (error) => mapClientError(error, "knowledge"),
+        (budget, operation) => requestBudgets.run(budget, () => budget.run(operation)));
+    },
     createCaptureWriter(schemas: ValidatedSchema) {
       for (const key of ["projects", "subprojects", "knowledge"] as const) if (schemas[key].databaseId !== config.databases[key]) throw new DomainError("FORBIDDEN");
       contextEnabled = true;
