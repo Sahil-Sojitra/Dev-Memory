@@ -6,6 +6,8 @@ import { NOTION_SCHEMA } from "../domain/schema-map.ts";
 import { getCorrelationId, withCorrelationId } from "../observability/context.ts";
 import type { AppLogger } from "../observability/logger.ts";
 import { listProjectsInputSchema } from "../services/projects.ts";
+import type { ProjectContextService } from "../domain/project-context.ts";
+import { registerProjectContext } from "./project-context.ts";
 
 const outputSchema = z.strictObject({
   projects: z.array(z.strictObject({
@@ -32,6 +34,7 @@ const safeInputSchema = {
 
 export interface McpServices {
   readonly projects: ProjectListingService;
+  readonly projectContext: ProjectContextService;
   readonly logger: AppLogger;
 }
 
@@ -58,5 +61,6 @@ export function createMcpServer(services: McpServices): McpServer {
       return { isError: true, content: [{ type: "text" as const, text: JSON.stringify(result) }], structuredContent: result };
     }
   }));
+  registerProjectContext(server, services.projectContext, services.logger);
   return server;
 }

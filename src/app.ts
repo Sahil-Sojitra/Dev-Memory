@@ -11,6 +11,9 @@ import type { ProjectRepository } from "./domain/projects.ts";
 import { createProjectListingService } from "./services/projects.ts";
 import { createMcpServer } from "./mcp/server.ts";
 
+import type { ProjectContextRepository } from "./domain/project-context.ts";
+import { createProjectContextService } from "./services/project-context.ts";
+
 // Configuration-only helper retained for KAN-6 callers. Stdio uses initializeApplication.
 export function runFoundation(environment: Environment, destination?: DestinationStream): number {
   return withCorrelationId(() => {
@@ -38,6 +41,7 @@ export interface ApplicationOptions {
   readonly destination?: DestinationStream;
   readonly schemaReader?: NotionSchemaReader;
   readonly projectRepository?: ProjectRepository;
+  readonly contextRepository?: ProjectContextRepository;
 }
 
 export async function initializeApplication(environment: Environment, options: ApplicationOptions = {}) {
@@ -56,8 +60,9 @@ export async function initializeApplication(environment: Environment, options: A
     phase = "project_services";
     const repository = options.projectRepository ?? client.createProjectRepository(schemas.projects);
     const projects = createProjectListingService(repository);
-    return Object.freeze({ config, notion, schemas, logger, projects,
-      createServer: () => createMcpServer({ projects, logger }),
+    const projectContext = createProjectContextService(options.contextRepository ?? client.createContextRepository(schemas));
+    return Object.freeze({ config, notion, schemas, logger, projects, projectContext,
+      createServer: () => createMcpServer({ projects, projectContext, logger }),
     });
   } catch (error) {
     logger.error("application_initialization_failed", { phase, error: mapError(error, getCorrelationId() ?? "unavailable") });
