@@ -20,6 +20,25 @@ async function setup(wrap?: (fetch: typeof globalThis.fetch) => typeof globalThi
   return { api, repository, service: createKnowledgeEntryService(repository) };
 }
 describe("knowledge read-only repository through the installed SDK", () => {
+  it("keeps code captions in the returned and cached complete body", async () => {
+    const { api, service } = await setup();
+    const code = wireBlock(1, "code", "const value = 1;");
+    Object.assign(code, { code: { rich_text: [{ plain_text: "const value = 1;" }], language: "typescript", caption: [{ plain_text: "Important code caption" }] } });
+    api.blocks.set(detail.id, [code]);
+    const first = await service.get({ pageId: detail.id });
+    expect(first.content.markdown).toBe("```typescript\nconst value = 1;\n```\n\nImportant code caption");
+    expect(first.content.truncated).toBe(false);
+    const cached = await service.get({ pageId: detail.id });
+    expect(cached.cacheHit).toBe(true); expect(cached.content).toEqual(first.content);
+  });
+  it("escapes literal Markdown prefixes and strike syntax without changing Unicode", () => {
+    const raw = wireBlock(1, "paragraph", "# literal 😀\n- item\n1. item\n---\n~~literal~~");
+    expect(mapBodyBlock(raw).markdown).toBe("\\# literal 😀\n\\- item\n1\\. item\n\\---\n\\~\\~literal\\~\\~");
+  });
+  it("escapes ordered-list prefixes assembled across rich-text fragments", () => {
+    const raw = wireBlock(); Object.assign(raw, { paragraph: { rich_text: [{ plain_text: "1." }, { plain_text: " literal" }] } });
+    expect(mapBodyBlock(raw).markdown).toBe("1\\. literal");
+  });
   it("maps metadata and reads body through budgeted GETs only", async () => {
     const { api, service } = await setup();
     const result = await service.get({ pageId: detail.id });

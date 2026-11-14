@@ -38,6 +38,11 @@ columns/column lists, synced-block children and media/bookmark/embed links.
 Tables are readable pipe-delimited rows; no inferred header schema is added.
 Rich text preserves bold, italic, strike-through, inline code and safe links.
 Code text is preserved with fences long enough to contain embedded backticks.
+Code captions follow their fenced block and remain part of cached complete
+content. Fence calculation is iterative, so very large backtick-heavy blocks
+reach the normal content/truncation limits without argument-spread failures.
+Literal block-leading Markdown is escaped; child prefixes preserve numbered-list
+indentation and blockquote context. Layout conversion remains bounded and partial.
 Media is linked, never downloaded. Only HTTP(S)/mailto links are emitted.
 
 Unsupported blocks have visible placeholders, increment `unsupportedBlocks` and

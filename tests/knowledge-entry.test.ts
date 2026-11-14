@@ -31,6 +31,39 @@ describe("readable block conversion", () => {
   });
 });
 describe("knowledge entry service", () => {
+  it("truncates huge backtick-heavy code without RangeError and never caches the partial body", async () => {
+    const repo = memoryKnowledgeRepository([{ ...bodyBlock(1, "code", "`x".repeat(150_000)), language: "javascript" }]);
+    const read = vi.spyOn(repo, "listBlocks"); const service = createKnowledgeEntryService(repo);
+    for (let i = 0; i < 2; i++) {
+      const result = await service.get({ pageId: detail.id });
+      expect(result.content.markdown.length).toBeLessThanOrEqual(BODY_MAX_CHARACTERS);
+      expect(result.content.reasons).toContain("content_limit"); expect(result.truncated).toBe(true); expect(result.cacheHit).toBe(false);
+    }
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+  it.each(["numbered_list_item", "quote"])("preserves child context below a %s", async (type) => {
+    const parent = { ...bodyBlock(1, type, "Parent"), hasChildren: true };
+    const repo = memoryKnowledgeRepository([parent]); const original = repo.listBlocks;
+    repo.listBlocks = async (id, cursor, budget) => {
+      if (id === parent.id) { budget.consume(); return { items: [bodyBlock(2, "paragraph", "Child")], hasMore: false, nextCursor: null }; }
+      return original(id, cursor, budget);
+    };
+    const result = await createKnowledgeEntryService(repo).get({ pageId: detail.id });
+    expect(result.content.markdown).toBe(type === "quote" ? "> Parent\n\n> Child" : "1. Parent\n\n   Child");
+  });
+  it("preserves numbered-list nesting inside a quote", async () => {
+    const quote = { ...bodyBlock(1, "quote", "Quote"), hasChildren: true };
+    const numbered = { ...bodyBlock(2, "numbered_list_item", "Item"), hasChildren: true };
+    const repo = memoryKnowledgeRepository([quote]); const original = repo.listBlocks;
+    repo.listBlocks = async (id, cursor, budget) => {
+      if (id === quote.id || id === numbered.id) {
+        budget.consume(); return { items: [id === quote.id ? numbered : bodyBlock(3, "paragraph", "Child")], hasMore: false, nextCursor: null };
+      }
+      return original(id, cursor, budget);
+    };
+    const result = await createKnowledgeEntryService(repo).get({ pageId: detail.id });
+    expect(result.content.markdown).toBe("> Quote\n\n> 1. Item\n\n>    Child");
+  });
   it("returns metadata and complete body with an isolated shared budget", async () => {
     const result = await createKnowledgeEntryService(memoryKnowledgeRepository()).get({ pageId: detail.id.toUpperCase() });
     expect(result.entry).toEqual(detail);
