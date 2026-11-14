@@ -15,6 +15,8 @@ import { createNotionContextRepository } from "./project-context.ts";
 import { cancelNotionBody, readNotionBody } from "./deadline.ts";
 import type { KnowledgeEntryRepository } from "../../domain/knowledge-entry.ts";
 import { createNotionKnowledgeEntryRepository } from "./knowledge-entry.ts";
+import type { CaptureWriter } from "../../domain/capture-knowledge.ts";
+import { createNotionCaptureWriter } from "./capture-knowledge.ts";
 
 export const NOTION_REQUEST_TIMEOUT_MS = 10_000;
 type SdkFetch = NonNullable<NonNullable<ConstructorParameters<typeof Client>[0]>["fetch"]>;
@@ -114,6 +116,7 @@ export interface NotionClient extends NotionSchemaReader {
   createProjectRepository(schema: ValidatedDatabase): ProjectRepository;
   createContextRepository(schemas: ValidatedSchema): ProjectContextRepository;
   createKnowledgeEntryRepository(schema: ValidatedDatabase): KnowledgeEntryRepository;
+  createCaptureWriter(schemas: ValidatedSchema): CaptureWriter;
 }
 
 export function createNotionClient(config: AppConfig["notion"], options: NotionReaderOptions = {}): NotionClient {
@@ -121,11 +124,15 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
   const projectSources = new Set<string>();
   const contextSources = new Set<string>();
   const requestBudgets = new AsyncLocalStorage<RequestBudget>();
+  const writePermits = new AsyncLocalStorage<{ method: string; path: string; started: boolean }>();
   let contextEnabled = false;
-  // Defense in depth: this integration has no write capability, even by accident.
+  // Read capabilities remain the default. Mutations require an exact, scoped,
+  // single-attempt capability issued only to the create-only capture writer.
   const readOnlyFetch: typeof globalThis.fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const permit = writePermits.getStore();
+    const permittedWrite = permit !== undefined && permit.method === method && permit.path === url.pathname && requestBudgets.getStore() !== undefined;
     const metadataRead = method === "GET" && /^\/v1\/(databases|data_sources)\/[0-9a-f-]+$/i.test(url.pathname);
     const projectQuery = method === "POST" && [...projectSources].some((id) => url.pathname === "/v1/data_sources/" + id + "/query");
     const contextRead = contextEnabled && requestBudgets.getStore() !== undefined && method === "GET" && /^\/v1\/pages\/[0-9a-f-]+$/i.test(url.pathname);
@@ -138,7 +145,7 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
       && /^\/v1\/blocks\/[0-9a-f-]+\/children$/i.test(url.pathname)
       && [...url.searchParams.keys()].every((key) => key === "page_size" || key === "start_cursor")
       && url.searchParams.get("page_size") === "100";
-    if ((!metadataRead && !projectQuery && !contextRead && !contextQuery && !relationRead && !blockRead) || url.origin !== "https://api.notion.com"
+    if ((!metadataRead && !projectQuery && !contextRead && !contextQuery && !relationRead && !blockRead && !permittedWrite) || url.origin !== "https://api.notion.com"
       || (url.search && !relationRead && !blockRead) || url.hash) {
       throw new DomainError("FORBIDDEN");
     }
@@ -147,7 +154,9 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
     const upstreamSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     const signal = upstreamSignal ? AbortSignal.any([budget.signal, upstreamSignal]) : budget.signal;
     return budget.run(async () => {
+      if (permittedWrite && permit.started) throw new DomainError("WRITE_OUTCOME_UNKNOWN");
       budget.consume();
+      if (permittedWrite) permit.started = true;
       const response = await fetchImplementation(input, { ...init, redirect: "error", signal });
       try { budget.assertActive(); }
       catch (error) { cancelNotionBody(response); throw error; }
@@ -158,6 +167,16 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
   const sdkFetch: SdkFetch = async (url, init) => {
     const budget = requestBudgets.getStore();
     const response = await readOnlyFetch(url, init);
+    if (writePermits.getStore() && !response.ok) {
+      // Throw an application error before SDK HTTP-error construction so its
+      // automatic 429/529 retries can never replay a mutation. Do not log/read
+      // the vendor body, which may contain submitted content.
+      cancelNotionBody(response);
+      const code: ErrorCode = response.status === 400 ? "VALIDATION_ERROR" : response.status === 401 ? "UNAUTHORIZED"
+        : response.status === 403 ? "FORBIDDEN" : response.status === 404 ? "NOT_FOUND" : response.status === 409 ? "CONFLICT"
+          : response.status === 413 ? "PAYLOAD_TOO_LARGE" : response.status === 429 ? "RATE_LIMITED" : "WRITE_OUTCOME_UNKNOWN";
+      throw new DomainError(code);
+    }
     return { ok: response.ok, status: response.status, headers: response.headers,
       text: () => budget ? readNotionBody(response, budget) : response.text(),
     };
@@ -181,6 +200,21 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
   }
 
   return Object.freeze({
+    createCaptureWriter(schemas: ValidatedSchema) {
+      for (const key of ["projects", "subprojects", "knowledge"] as const) if (schemas[key].databaseId !== config.databases[key]) throw new DomainError("FORBIDDEN");
+      contextEnabled = true;
+      const withBudget = <T>(budget: RequestBudget, operation: () => Promise<T>) => requestBudgets.run(budget, () => budget.run(operation));
+      return createNotionCaptureWriter(client, schemas, (error) => mapClientError(error, "knowledge"), withBudget,
+        async (budget, method, path, operation) => {
+          if (!((method === "POST" && path === "/v1/pages") || (method === "PATCH" && /^\/v1\/blocks\/[0-9a-f-]+\/children$/i.test(path)))) throw new DomainError("FORBIDDEN");
+          const permit = { method, path, started: false };
+          try { return await writePermits.run(permit, () => withBudget(budget, operation)); }
+          catch (error) {
+            if (permit.started && (!(error instanceof DomainError) || error.code === "REQUEST_BUDGET_EXCEEDED")) throw new DomainError("WRITE_OUTCOME_UNKNOWN");
+            throw mapClientError(error, "knowledge");
+          }
+        });
+    },
     createKnowledgeEntryRepository(schema: ValidatedDatabase) {
       if (schema.databaseId !== config.databases.knowledge) throw new DomainError("FORBIDDEN");
       contextEnabled = true;
