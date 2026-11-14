@@ -53,7 +53,7 @@ try {
   results.push({ check: "initialize", status: "PASS" });
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
   const listed = await request("tools/list");
-  assert.deepEqual(listed.result?.tools?.map((tool) => tool.name), ["list_projects", "get_project_context", "get_knowledge_entry"]);
+  assert.deepEqual(listed.result?.tools?.map((tool) => tool.name), ["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge"]);
   results.push({ check: "tool_discovery", status: "PASS" });
   async function call(input) {
     const response = await request("tools/call", { name: "list_projects", arguments: input });
