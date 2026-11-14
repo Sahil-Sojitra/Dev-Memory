@@ -1,9 +1,9 @@
 import { createProjectFixtureApi } from "./projects.ts";
-import { createContextFixtureApi } from "./project-context.ts";
+import { createKnowledgeFixtureApi } from "./knowledge-entry.ts";
 
 // Test-only preload: all requests are synthetic, with no network fallback.
 const api = createProjectFixtureApi();
-const contextApi = createContextFixtureApi();
+const knowledgeApi = createKnowledgeFixtureApi();
 globalThis.fetch = process.env.FIXTURE_SCHEMA_FAILURE === "1"
   ? async () => Response.json({ object: "error", status: 401, code: "unauthorized", message: "synthetic vendor payload" }, { status: 401 })
   : async (input, init) => {
@@ -12,7 +12,7 @@ globalThis.fetch = process.env.FIXTURE_SCHEMA_FAILURE === "1"
       return new Promise(() => { setInterval(() => {}, 1_000); });
     }
     const url = new Request(input, init).url;
-    if (url.includes("/pages/") || url.includes("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/query") || url.includes("cccccccc-cccc-4ccc-8ccc-cccccccccccc/query")) return contextApi.fetch(input, init);
+    if ((url.includes("/pages/") || url.includes("/blocks/")) || url.includes("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/query") || url.includes("cccccccc-cccc-4ccc-8ccc-cccccccccccc/query")) return knowledgeApi.fetch(input, init);
     return api.fetch(input, init);
   };
 

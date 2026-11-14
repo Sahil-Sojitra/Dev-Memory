@@ -30,7 +30,7 @@ assert.equal((await entry.fetch(new Request(url + "/api/ready", { headers }))).s
 const initialized = await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "kan10-vercel-contract", version: "1.0.0" } } });
 assert.equal(initialized.result.serverInfo.name, "devmemory");
 const tools = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-assert.deepEqual(tools.result.tools.map((tool) => tool.name), ["list_projects", "get_project_context"]);
+assert.deepEqual(tools.result.tools.map((tool) => tool.name), ["list_projects", "get_project_context", "get_knowledge_entry"]);
 const calls = await Promise.all([1, 2].map((id) => rpc({ jsonrpc: "2.0", id: id + 2, method: "tools/call", params: { name: "list_projects", arguments: { limit: 1 } } })));
 for (const result of calls) {
   assert.equal(result.result.isError, undefined);
