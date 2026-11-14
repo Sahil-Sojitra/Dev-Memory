@@ -186,17 +186,34 @@ in Notion; case-insensitive name matching happens in the service. A page can ret
 fewer or zero matches while `hasMore` is true. Continue with `nextCursor` and the
 same filters and limit until `hasMore` is false.
 
+### Available: `get_project_context`
+
+Read project details, associated subprojects, knowledge counts grouped by Type
+and Verification, and separate recent, Setup / Runbook and Needs Review lists.
+
+```json
+{
+  "projectId": "<PROJECT_PAGE_UUID>",
+  "recentLimit": 10
+}
+```
+
+An optional `subprojectId` scopes knowledge after relationship validation. Each
+list is independently limited to 1-25 entries and sorted newest updated first.
+The shared outbound request budget and scan caps can produce partial results;
+always inspect the returned completeness flags before treating counts as exact.
+See the [project context contract](docs/project-context.md) for fields and bounds.
+
 ### Planned tools
 
 The following approved tools are not implemented yet:
 
-- `get_project_context`
 - `capture_knowledge`
 - `search_knowledge`
 - `get_knowledge_entry`
 
-Validated Subprojects and Knowledge schemas do not yet expose their records as
-business tools.
+Subprojects and Knowledge are read through `get_project_context`; independent
+knowledge retrieval, search and capture remain future tools.
 
 ## Architecture
 
@@ -344,6 +361,7 @@ issues or test fixtures.
 | [Notion schema validation](docs/notion-schema-validation.md) | Schema map, configuration, and startup checks |
 | [Local MCP](docs/local-mcp.md) | Tool contract, Antigravity setup, and local verification |
 | [HTTP MCP](docs/http-mcp.md) | Authentication, rotation, security limits, and hosting gate |
+| [Project context](docs/project-context.md) | Context scope, knowledge lists, aggregate counts, budgets and truncation |
 
 ## License
 

@@ -23,7 +23,7 @@ The evidence below records the earlier temporary spike, not a production server.
 | Shared services for both transports | Shared business services and tool registration | KAN-10 stdio/HTTP share KAN-9's factory and project service; local contract tests passed |
 | Static bearer authentication remotely | Authenticate before dispatch; HTTPS when hosted | KAN-10 stores current/next SHA-256 digests only and compares two fixed-size buffers with timingSafeEqual; auth failure tests pass |
 | Vercel Hobby as intended host | Function request handler without application-level `listen()` | **Hosted deployment is NOT YET VERIFIED** |
-| Exactly five business tools | Fixed registry below | KAN-9 implements only `list_projects`; four remain for later tickets. The earlier spike exposed only `spike_echo` |
+| Exactly five business tools | Fixed registry below | KAN-12 implements `get_project_context` alongside `list_projects`; three remain for later tickets. The earlier spike exposed only `spike_echo` |
 | No additional persistence infrastructure | No separate database, queue, vector database, or embeddings in Phase 1 | None was needed for the spike |
 
 ## Approved business tools
@@ -33,6 +33,10 @@ The evidence below records the earlier temporary spike, not a production server.
 3. `capture_knowledge`
 4. `search_knowledge`
 5. `get_knowledge_entry`
+
+KAN-12 adds read-only `get_project_context` to the shared factory. Its business
+service and Notion repository reuse both transports, with per-invocation budgets
+and explicit scan completeness. See [project context](project-context.md).
 
 `spike_echo` was a disposable compatibility tool, not part of the production set.
 
