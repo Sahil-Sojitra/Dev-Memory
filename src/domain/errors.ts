@@ -1,6 +1,10 @@
 import type { DatabaseKey, SchemaIssue } from "./notion-schema.ts";
 
 export const ERROR_CATALOG = {
+  WRITE_CONFIRMED_AFTER_DEADLINE: { message: "All requested writes were confirmed, but the operation exceeded its deadline. Do not retry capture.", httpStatus: 504, retryable: false },
+  VERIFICATION_REQUIRES_HUMAN: { message: "Only a human may manually mark knowledge Verified in Notion after checking it. Use Draft, Hypothesis or Needs Review.", httpStatus: 400, retryable: false },
+  PARTIAL_WRITE: { message: "The page was created but capture did not finish. Inspect the recovery details and existing page; do not retry capture automatically.", httpStatus: 502, retryable: false },
+  WRITE_OUTCOME_UNKNOWN: { message: "A write may have succeeded without confirmation. Inspect Notion before retrying; automatic retry could create duplicates.", httpStatus: 502, retryable: false },
   NOT_IN_KNOWLEDGE_DB: { message: "The page does not belong to the Knowledge data source.", httpStatus: 400, retryable: false },
   INVALID_RELATION: { message: "The subproject does not belong to the selected project.", httpStatus: 400, retryable: false },
   REQUEST_BUDGET_EXCEEDED: { message: "The request budget was exhausted.", httpStatus: 503, retryable: true },

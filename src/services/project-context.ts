@@ -3,6 +3,7 @@ import { DomainError, RequestValidationError } from "../domain/errors.ts";
 import type { ContextPage, KnowledgeClassification, KnowledgeEntry, ProjectContextRepository, ProjectContextService, RequestBudget, ScanInfo } from "../domain/project-context.ts";
 import { NOTION_SCHEMA } from "../domain/schema-map.ts";
 import { createRequestBudget } from "./request-budget.ts";
+import { validateProjectScope } from "./project-scope.ts";
 export { createRequestBudget, CONTEXT_MAX_REQUESTS, CONTEXT_MAX_DURATION_MS } from "./request-budget.ts";
 
 export const CONTEXT_SCAN_LIMIT = 500;
@@ -28,13 +29,7 @@ export function createProjectContextService(repository: ProjectContextRepository
     const budget = budgetFactory();
     try {
       return await budget.run(async () => {
-        const project = await budget.run(() => repository.getProject(value.projectId, budget));
-        if (value.subprojectId) {
-          let selected;
-          try { selected = await budget.run(() => repository.getSubproject(value.subprojectId!, budget)); }
-          catch (error) { if (error instanceof DomainError && error.code === "NOT_FOUND") throw new DomainError("INVALID_RELATION"); throw error; }
-          if (!selected.projectIds.includes(value.projectId)) throw new DomainError("INVALID_RELATION");
-        }
+        const project = await validateProjectScope(repository, value, budget);
         async function scan<T extends { readonly id: string }>(read: (limit: number, cursor?: string) => Promise<ContextPage<T>>) {
           const items: T[] = [];
           const seen = new Set<string>();
