@@ -8,6 +8,8 @@ import type { AppLogger } from "../observability/logger.ts";
 import { listProjectsInputSchema } from "../services/projects.ts";
 import type { ProjectContextService } from "../domain/project-context.ts";
 import { registerProjectContext } from "./project-context.ts";
+import type { KnowledgeEntryService } from "../domain/knowledge-entry.ts";
+import { registerKnowledgeEntry } from "./knowledge-entry.ts";
 
 const outputSchema = z.strictObject({
   projects: z.array(z.strictObject({
@@ -35,6 +37,7 @@ const safeInputSchema = {
 export interface McpServices {
   readonly projects: ProjectListingService;
   readonly projectContext: ProjectContextService;
+  readonly knowledgeEntry: KnowledgeEntryService;
   readonly logger: AppLogger;
 }
 
@@ -62,5 +65,6 @@ export function createMcpServer(services: McpServices): McpServer {
     }
   }));
   registerProjectContext(server, services.projectContext, services.logger);
+  registerKnowledgeEntry(server, services.knowledgeEntry, services.logger);
   return server;
 }
