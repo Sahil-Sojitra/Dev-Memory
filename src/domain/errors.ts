@@ -1,6 +1,8 @@
 import type { DatabaseKey, SchemaIssue } from "./notion-schema.ts";
 
 export const ERROR_CATALOG = {
+  INVALID_RELATION: { message: "The subproject does not belong to the selected project.", httpStatus: 400, retryable: false },
+  REQUEST_BUDGET_EXCEEDED: { message: "The request budget was exhausted.", httpStatus: 503, retryable: true },
   METHOD_NOT_ALLOWED: { message: "The HTTP method is not supported.", httpStatus: 405, retryable: false },
   PAYLOAD_TOO_LARGE: { message: "The payload exceeds the size limit.", httpStatus: 413, retryable: false },
   UNSUPPORTED_MEDIA_TYPE: { message: "The request content type is not supported.", httpStatus: 415, retryable: false },
