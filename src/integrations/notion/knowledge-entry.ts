@@ -6,6 +6,7 @@ import type { ValidatedDatabase } from "../../domain/notion-schema.ts";
 import { canonicalNotionId } from "../../domain/notion-schema.ts";
 import { DomainError, SchemaDriftError } from "../../domain/errors.ts";
 import { mapKnowledge } from "./project-context.ts";
+import { backtickFence } from "../../domain/markdown.ts";
 
 const pageSchema = z.object({ object: z.literal("page"), id: z.uuid(), archived: z.boolean().optional(), in_trash: z.boolean().optional(),
   parent: z.object({ type: z.string(), data_source_id: z.string().optional() }), properties: z.record(z.string(), z.unknown()),
@@ -21,13 +22,19 @@ function safeUrl(value: unknown): string | undefined {
   try { const url = new URL(value); return ["http:", "https:", "mailto:"].includes(url.protocol) ? url.href.replaceAll("(", "%28").replaceAll(")", "%29") : undefined; }
   catch { return undefined; }
 }
-function escape(text: string): string { return text.replace(/([\\`*_\[\]<>])/g, "\\$1"); }
+function escapeLeading(text: string): string {
+  return text.replace(/^(\s*)(#{1,6})(?=\s|$)/gm, "$1\\$2")
+    .replace(/^(\s*)([-+])(?=\s)/gm, "$1\\$2")
+    .replace(/^(\s*\d+)([.)])(?=\s)/gm, "$1\\$2")
+    .replace(/^(\s*)([-=_])(?=[-=_]{2,}\s*$)/gm, "$1\\$2");
+}
+function escape(text: string): string { return escapeLeading(text.replace(/([\\`*_\[\]<>~])/g, "\\$1")); }
 function rich(value: unknown) {
   const parts = parse(richText, value);
-  return { text: parts.map((part) => part.plain_text).join(""), markdown: parts.map((part) => {
+  return { text: parts.map((part) => part.plain_text).join(""), markdown: escapeLeading(parts.map((part) => {
     let text = escape(part.plain_text);
     if (part.annotations?.code) {
-      const fence = "`".repeat(Math.max(1, ...[...part.plain_text.matchAll(/`+/g)].map((match) => match[0].length + 1)));
+      const fence = backtickFence(part.plain_text, 1);
       text = fence + " " + part.plain_text + " " + fence;
     }
     if (part.annotations?.bold) text = "**" + text + "**";
@@ -35,7 +42,7 @@ function rich(value: unknown) {
     if (part.annotations?.strikethrough) text = "~~" + text + "~~";
     const href = safeUrl(part.href);
     return href ? "[" + text + "](" + href + ")" : text;
-  }).join("") };
+  }).join("")) };
 }
 export function mapBodyBlock(raw: unknown): BodyBlock {
   const base = parse(z.object({ object: z.literal("block"), id: z.uuid(), type: z.string().regex(/^[a-z0-9_]+$/), has_children: z.boolean() }), raw);

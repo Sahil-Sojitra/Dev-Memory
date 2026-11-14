@@ -1,4 +1,5 @@
 import type { BodyBlock } from "../domain/knowledge-entry.ts";
+import { backtickFence } from "../domain/markdown.ts";
 
 export function renderBlock(block: BodyBlock): { text: string; supported: boolean } {
   const text = block.markdown;
@@ -14,9 +15,9 @@ export function renderBlock(block: BodyBlock): { text: string; supported: boolea
     case "callout": return { text: "> " + text.replaceAll("\n", "\n> "), supported: true };
     case "toggle": return { text: "**" + text + "**", supported: true };
     case "code": {
-      const fence = "`".repeat(Math.max(3, ...[...block.text.matchAll(/`+/g)].map((match) => match[0].length + 1)));
+      const fence = backtickFence(block.text, 3);
       const language = (block.language ?? "").replace(/[^a-zA-Z0-9_+-]/g, "");
-      return { text: fence + language + "\n" + block.text + "\n" + fence, supported: true };
+      return { text: fence + language + "\n" + block.text + "\n" + fence + (block.caption ? "\n\n" + block.caption : ""), supported: true };
     }
     case "divider": return { text: "---", supported: true };
     case "equation": return { text: "$$\n" + block.text + "\n$$", supported: true };

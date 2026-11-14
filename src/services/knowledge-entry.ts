@@ -40,15 +40,15 @@ export function createKnowledgeEntryService(repository: KnowledgeEntryRepository
           let blocksRead = 0;
           let unsupportedBlocks = 0;
           let stopped = false;
-          function append(text: string, depth: number) {
+          function append(text: string, prefix: string) {
             if (!text) return;
-            const rendered = (parts.length ? "\n\n" : "") + text.split("\n").map((line) => "  ".repeat(depth) + line).join("\n");
+            const rendered = (parts.length ? "\n\n" : "") + text.split("\n").map((line) => prefix + line).join("\n");
             const remaining = BODY_MAX_CHARACTERS - characters;
             parts.push(rendered.slice(0, remaining));
             characters += Math.min(remaining, rendered.length);
             if (rendered.length > remaining) { reasons.add("content_limit"); stopped = true; }
           }
-          async function walk(id: string, depth: number): Promise<void> {
+          async function walk(id: string, depth: number, prefix = ""): Promise<void> {
             if (blocksRead >= BODY_MAX_BLOCKS) { reasons.add("block_limit"); stopped = true; return; }
             let cursor: string | undefined;
             const cursors = new Set<string>();
@@ -61,11 +61,16 @@ export function createKnowledgeEntryService(repository: KnowledgeEntryRepository
                 seen.add(block.id); blocksRead++;
                 const rendered = renderBlock(block);
                 if (!rendered.supported) { unsupportedBlocks++; reasons.add("unsupported_block"); }
-                append(rendered.text, depth);
+                append(rendered.text, prefix);
                 if (stopped) return;
                 if (block.hasChildren && rendered.supported) {
                   if (depth >= BODY_MAX_DEPTH) reasons.add("depth_limit");
-                  else await walk(block.id, depth + 1);
+                  else {
+                    const childPrefix = block.type === "quote" || block.type === "callout" ? prefix + "> "
+                      : block.type === "numbered_list_item" ? prefix + "   "
+                        : ["table", "column", "column_list", "synced_block"].includes(block.type) ? prefix : prefix + "  ";
+                    await walk(block.id, depth + 1, childPrefix);
+                  }
                 }
                 if (stopped) return;
               }
