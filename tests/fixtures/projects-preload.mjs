@@ -1,9 +1,9 @@
 import { createProjectFixtureApi } from "./projects.ts";
-import { createCaptureFixtureApi } from "./capture-knowledge.ts";
+import { createSearchFixtureApi } from "./search-knowledge.ts";
 
 // Test-only preload: all requests are synthetic, with no network fallback.
 const api = createProjectFixtureApi();
-const knowledgeApi = createCaptureFixtureApi();
+const knowledgeApi = createSearchFixtureApi();
 globalThis.fetch = process.env.FIXTURE_SCHEMA_FAILURE === "1"
   ? async () => Response.json({ object: "error", status: 401, code: "unauthorized", message: "synthetic vendor payload" }, { status: 401 })
   : async (input, init) => {

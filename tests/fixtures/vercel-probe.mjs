@@ -30,7 +30,7 @@ assert.equal((await entry.fetch(new Request(url + "/api/ready", { headers }))).s
 const initialized = await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "kan10-vercel-contract", version: "1.0.0" } } });
 assert.equal(initialized.result.serverInfo.name, "devmemory");
 const tools = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
-assert.deepEqual(tools.result.tools.map((tool) => tool.name), ["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge"]);
+assert.deepEqual(tools.result.tools.map((tool) => tool.name), ["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge", "search_knowledge"]);
 const calls = await Promise.all([1, 2].map((id) => rpc({ jsonrpc: "2.0", id: id + 2, method: "tools/call", params: { name: "list_projects", arguments: { limit: 1 } } })));
 for (const result of calls) {
   assert.equal(result.result.isError, undefined);
@@ -44,4 +44,11 @@ for (const result of contexts) {
   assert.equal(result.result.structuredContent.requestBudget.usedRequests, 6);
 }
 assert.deepEqual(counts, { metadata: 6, queries: 12, pages: 2 });
-process.stdout.write(JSON.stringify({ status: "PASS", scope: "local compiled Vercel fetch contract, synthetic API", checks: ["health", "invalid_auth_before_initialization", "ready", "initialize", "tools_list", "parallel_tools_call", "project_context", "no_session"], ...counts }) + "\n");
+for (const [id, query, depth] of [[20, "setup", "metadata"], [21, "readable", "auto"]]) {
+  const searched = await rpc({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "search_knowledge", arguments: { query, depth } } });
+  assert.equal(searched.result.isError, undefined);
+  assert.equal(searched.result.structuredContent.results.length, 1);
+  assert.equal(searched.result.structuredContent.diagnostics.bodiesScanned, depth === "metadata" ? 0 : 1);
+  assert.equal(searched.result.structuredContent.diagnostics.requestCount, depth === "metadata" ? 1 : 3);
+}
+process.stdout.write(JSON.stringify({ status: "PASS", scope: "local compiled Vercel fetch contract, synthetic API", checks: ["health", "invalid_auth_before_initialization", "ready", "initialize", "tools_list", "parallel_tools_call", "project_context", "search_metadata", "search_auto", "no_session"], ...counts }) + "\n");

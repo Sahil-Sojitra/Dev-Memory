@@ -16,7 +16,7 @@ describe("stdio entry with synthetic Notion API", () => {
     const connection = stdioConnection(entry);
     try {
       expect((await connection.initialize()).result?.serverInfo?.name).toBe("devmemory");
-      expect((await connection.request("tools/list")).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge"]);
+      expect((await connection.request("tools/list")).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge", "search_knowledge"]);
       const first = await connection.request("tools/call", { name: "list_projects", arguments: { limit: 1 } });
       expect(first.result?.structuredContent).toEqual({ projects: [project], hasMore: true, nextCursor: "fixture:1" });
       const second = await connection.request("tools/call", { name: "list_projects", arguments: { limit: 1, cursor: "fixture:1" } });
@@ -30,6 +30,12 @@ describe("stdio entry with synthetic Notion API", () => {
       const knowledge = await connection.request("tools/call", { name: "get_knowledge_entry", arguments: { pageId: detail.id } });
       expect(knowledge.result?.isError).not.toBe(true);
       expect(knowledge.result?.structuredContent).toMatchObject({ entry: detail, content: { markdown: "Readable content", truncated: false } });
+      const searched = await connection.request("tools/call", { name: "search_knowledge", arguments: { query: "setup", depth: "metadata" } });
+      expect(searched.result?.isError).not.toBe(true);
+      expect(searched.result?.structuredContent).toMatchObject({ results: [{ id: detail.id, bodyScanned: false }], diagnostics: { bodiesScanned: 0, requestCount: 1, maxRequests: 40 } });
+      const bodySearch = await connection.request("tools/call", { name: "search_knowledge", arguments: { query: "readable", depth: "auto" } });
+      expect(bodySearch.result?.isError).not.toBe(true);
+      expect(bodySearch.result?.structuredContent).toMatchObject({ results: [{ id: detail.id, matchedIn: ["body"] }], diagnostics: { bodiesScanned: 1 } });
       const captured = await connection.request("tools/call", { name: "capture_knowledge", arguments: { ...captureInput, content: "Synthetic body" } });
       expect(captured.result?.isError).not.toBe(true);
       expect(captured.result?.structuredContent).toMatchObject({ entry: { ...capturedPage, verification: "Draft" }, body: { complete: true, blocksWritten: 1 } });
@@ -61,7 +67,7 @@ describe("stdio entry with synthetic Notion API", () => {
         "io.modelcontextprotocol/clientCapabilities": {},
       };
       const listed = await connection.request("tools/list", { _meta: meta });
-      expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge"]);
+      expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge", "search_knowledge"]);
       const called = await connection.request("tools/call", { _meta: meta, name: "list_projects", arguments: { limit: 1 } });
       expect(called.error).toBeUndefined();
       expect(called.result?.isError).not.toBe(true);
