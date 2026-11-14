@@ -23,7 +23,7 @@ describe("Vercel entry contract (no hosted deployment)", () => {
       env: { SystemRoot: process.env.SystemRoot, ...validHttpEnvironment }, windowsHide: true, encoding: "utf8", timeout: 10_000,
     });
     expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({ status: "PASS", metadata: 6, queries: 2 });
+    expect(JSON.parse(result.stdout)).toMatchObject({ status: "PASS", metadata: 6, queries: 12, pages: 2 });
     expect(result.stderr).toContain("notion_schema_validated");
     expect(result.stderr).toContain("list_projects_completed");
     expect(result.stdout + result.stderr).not.toContain(FAKE_BEARER_TOKEN);

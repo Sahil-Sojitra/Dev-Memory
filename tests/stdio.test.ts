@@ -14,7 +14,7 @@ describe("stdio entry with synthetic Notion API", () => {
     const connection = stdioConnection(entry);
     try {
       expect((await connection.initialize()).result?.serverInfo?.name).toBe("devmemory");
-      expect((await connection.request("tools/list")).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects"]);
+      expect((await connection.request("tools/list")).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context"]);
       const first = await connection.request("tools/call", { name: "list_projects", arguments: { limit: 1 } });
       expect(first.result?.structuredContent).toEqual({ projects: [project], hasMore: true, nextCursor: "fixture:1" });
       const second = await connection.request("tools/call", { name: "list_projects", arguments: { limit: 1, cursor: "fixture:1" } });
@@ -22,6 +22,9 @@ describe("stdio entry with synthetic Notion API", () => {
       expect(second.result?.structuredContent?.projects[0]?.name).toBe("Other Project");
       const filtered = await connection.request("tools/call", { name: "list_projects", arguments: { nameContains: "deVM", status: "Active", limit: 1 } });
       expect(filtered.result?.structuredContent).toEqual({ projects: [project], hasMore: false, nextCursor: null });
+      const context = await connection.request("tools/call", { name: "get_project_context", arguments: { projectId: project.id, recentLimit: 1 } });
+      expect(context.result?.isError).not.toBe(true);
+      expect(context.result?.structuredContent).toMatchObject({ project, knowledgeCounts: { total: 1 }, requestBudget: { usedRequests: 6 } });
     } finally { await connection.close(); }
     const diagnostics = connection.diagnostics();
     expect(diagnostics.invalidLines).toEqual([]);
@@ -50,7 +53,7 @@ describe("stdio entry with synthetic Notion API", () => {
         "io.modelcontextprotocol/clientCapabilities": {},
       };
       const listed = await connection.request("tools/list", { _meta: meta });
-      expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["list_projects"]);
+      expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context"]);
       const called = await connection.request("tools/call", { _meta: meta, name: "list_projects", arguments: { limit: 1 } });
       expect(called.error).toBeUndefined();
       expect(called.result?.isError).not.toBe(true);

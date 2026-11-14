@@ -8,6 +8,7 @@ import type { ProjectRepository } from "../src/domain/projects.ts";
 import { FAKE_BEARER_SHA256, FAKE_BEARER_TOKEN, FAKE_NEXT_SHA256, FAKE_NEXT_TOKEN, FAKE_NOTION_TOKEN, validHttpEnvironment } from "./fixtures/environment.ts";
 import { createFixtureApi, databaseIds, sourceIds } from "./fixtures/notion.ts";
 import { inMemoryProjects, project } from "./fixtures/projects.ts";
+import { createContextFixtureApi } from "./fixtures/project-context.ts";
 import type { WireReply } from "./fixtures/mcp.ts";
 
 beforeEach(() => { vi.spyOn(console, "warn").mockImplementation(() => {}); });
@@ -128,6 +129,18 @@ describe("HTTP authentication boundary", () => {
 });
 
 describe("stateless Streamable HTTP protocol", () => {
+  it("invokes project context concurrently through HTTP with shared bootstrap and isolated budgets", async () => {
+    const api = createContextFixtureApi();
+    vi.spyOn(globalThis, "fetch").mockImplementation(api.fetch);
+    const application = createHttpApplication(() => validHttpEnvironment, { destination: { write() {} } });
+    const responses = await Promise.all([1, 2].map((id) => application.fetch(request({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "get_project_context", arguments: { projectId: project.id, recentLimit: 1 } } }))));
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+      expect(response.headers.get("mcp-session-id")).toBeNull();
+      expect((await reply(response)).result).toMatchObject({ structuredContent: { project, requestBudget: { usedRequests: 6 }, knowledgeCounts: { total: 1 } } });
+    }
+    expect(api.metadata.requests).toHaveLength(6);
+  });
   it("initializes legacy MCP, lists tools, invokes the existing service and returns no session", async () => {
     const { application, list } = setup();
     const initialized = await application.fetch(request(initialize));
@@ -137,7 +150,7 @@ describe("stateless Streamable HTTP protocol", () => {
     const notification = await application.fetch(request({ jsonrpc: "2.0", method: "notifications/initialized" }));
     expect(notification.status).toBe(202);
     const tools = await application.fetch(request());
-    expect((await reply(tools)).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects"]);
+    expect((await reply(tools)).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context"]);
     const called = await application.fetch(request({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "list_projects", arguments: { limit: 1, nameContains: "DEV" } } }));
     expect(called.status).toBe(200);
     const result = await reply(called);
@@ -156,7 +169,7 @@ describe("stateless Streamable HTTP protocol", () => {
     }
     expect(new Set(close.mock.instances).size).toBe(5);
     expect(api.requests).toHaveLength(6);
-    expect((await reply(await setup().application.fetch(request()))).result?.tools).toHaveLength(1);
+    expect((await reply(await setup().application.fetch(request()))).result?.tools).toHaveLength(2);
   });
   it("supports modern discovery/list/call with JSON and rejects subscriptions without opening a stream", async () => {
     const { application } = setup();
@@ -171,7 +184,7 @@ describe("stateless Streamable HTTP protocol", () => {
     const discovery = await modern("server/discover");
     expect(discovery.headers.get("content-type")).toContain("application/json");
     expect((await reply(discovery)).result).toMatchObject({ capabilities: { tools: { listChanged: false } } });
-    expect((await reply(await modern("tools/list"))).result?.tools).toHaveLength(1);
+    expect((await reply(await modern("tools/list"))).result?.tools).toHaveLength(2);
     expect((await reply(await modern("tools/call", { name: "list_projects", arguments: { limit: 1 } }))).error).toBeUndefined();
     const listen = await modern("subscriptions/listen", { notifications: { tools: { listChanged: true } } });
     expect(listen.headers.get("content-type")).toContain("application/json");
