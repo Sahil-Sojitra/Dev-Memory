@@ -15,6 +15,8 @@ import type { ProjectContextRepository } from "./domain/project-context.ts";
 import { createProjectContextService } from "./services/project-context.ts";
 import type { KnowledgeEntryRepository } from "./domain/knowledge-entry.ts";
 import { createKnowledgeEntryService } from "./services/knowledge-entry.ts";
+import type { CaptureWriter } from "./domain/capture-knowledge.ts";
+import { createCaptureService } from "./services/capture-knowledge.ts";
 
 // Configuration-only helper retained for KAN-6 callers. Stdio uses initializeApplication.
 export function runFoundation(environment: Environment, destination?: DestinationStream): number {
@@ -45,6 +47,7 @@ export interface ApplicationOptions {
   readonly projectRepository?: ProjectRepository;
   readonly contextRepository?: ProjectContextRepository;
   readonly knowledgeEntryRepository?: KnowledgeEntryRepository;
+  readonly captureWriter?: CaptureWriter;
 }
 
 export async function initializeApplication(environment: Environment, options: ApplicationOptions = {}) {
@@ -63,10 +66,12 @@ export async function initializeApplication(environment: Environment, options: A
     phase = "project_services";
     const repository = options.projectRepository ?? client.createProjectRepository(schemas.projects);
     const projects = createProjectListingService(repository);
-    const projectContext = createProjectContextService(options.contextRepository ?? client.createContextRepository(schemas));
+    const contextRepository = options.contextRepository ?? client.createContextRepository(schemas);
+    const projectContext = createProjectContextService(contextRepository);
     const knowledgeEntry = createKnowledgeEntryService(options.knowledgeEntryRepository ?? client.createKnowledgeEntryRepository(schemas.knowledge));
-    return Object.freeze({ config, notion, schemas, logger, projects, projectContext, knowledgeEntry,
-      createServer: () => createMcpServer({ projects, projectContext, knowledgeEntry, logger }),
+    const capture = createCaptureService(options.captureWriter ?? client.createCaptureWriter(schemas), contextRepository);
+    return Object.freeze({ config, notion, schemas, logger, projects, projectContext, knowledgeEntry, capture,
+      createServer: () => createMcpServer({ projects, projectContext, knowledgeEntry, capture, logger }),
     });
   } catch (error) {
     logger.error("application_initialization_failed", { phase, error: mapError(error, getCorrelationId() ?? "unavailable") });

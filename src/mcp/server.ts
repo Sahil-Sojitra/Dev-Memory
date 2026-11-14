@@ -10,6 +10,8 @@ import type { ProjectContextService } from "../domain/project-context.ts";
 import { registerProjectContext } from "./project-context.ts";
 import type { KnowledgeEntryService } from "../domain/knowledge-entry.ts";
 import { registerKnowledgeEntry } from "./knowledge-entry.ts";
+import type { CaptureService } from "../domain/capture-knowledge.ts";
+import { registerCapture } from "./capture-knowledge.ts";
 
 const outputSchema = z.strictObject({
   projects: z.array(z.strictObject({
@@ -38,6 +40,7 @@ export interface McpServices {
   readonly projects: ProjectListingService;
   readonly projectContext: ProjectContextService;
   readonly knowledgeEntry: KnowledgeEntryService;
+  readonly capture: CaptureService;
   readonly logger: AppLogger;
 }
 
@@ -66,5 +69,6 @@ export function createMcpServer(services: McpServices): McpServer {
   }));
   registerProjectContext(server, services.projectContext, services.logger);
   registerKnowledgeEntry(server, services.knowledgeEntry, services.logger);
+  registerCapture(server, services.capture, services.logger);
   return server;
 }
