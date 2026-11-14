@@ -168,8 +168,8 @@ try {
   child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
   active = "tool_discovery";
   const tools = await request("tools/list");
-  assert.deepEqual(tools.result?.tools?.map((tool) => tool.name).sort(), ["capture_knowledge", "get_knowledge_entry", "get_project_context", "list_projects"]);
-  record(active, "PASS", "All four implemented tools discovered; this probe invokes read-only tools only.");
+  assert.deepEqual(tools.result?.tools?.map((tool) => tool.name).sort(), ["capture_knowledge", "get_knowledge_entry", "get_project_context", "list_projects", "search_knowledge"]);
+  record(active, "PASS", "All five implemented tools discovered; this probe invokes read-only tools only.");
   active = "list_projects";
   const projects = [];
   const cursors = new Set();
