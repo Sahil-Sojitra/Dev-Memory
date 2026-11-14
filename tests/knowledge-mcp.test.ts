@@ -1,3 +1,5 @@
+import { createCaptureService } from "../src/services/capture-knowledge.ts";
+import { memoryCaptureWriter } from "./fixtures/capture-knowledge.ts";
 import { describe, expect, it } from "vitest";
 import { createMcpServer } from "../src/mcp/server.ts";
 import { createKnowledgeEntryService } from "../src/services/knowledge-entry.ts";
@@ -15,7 +17,7 @@ async function connect(service: KnowledgeEntryService = createKnowledgeEntryServ
   const logs: string[] = [];
   const connection = await memoryConnection(createMcpServer({
     projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: service,
-    logger: createLogger({ environment: {}, destination: { write(line: string) { logs.push(line); } } }),
+    capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: createLogger({ environment: {}, destination: { write(line: string) { logs.push(line); } } }),
   }));
   await connection.initialize();
   return { connection, logs };

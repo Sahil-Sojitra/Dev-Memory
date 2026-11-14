@@ -1,3 +1,5 @@
+import { createCaptureService } from "../src/services/capture-knowledge.ts";
+import { memoryCaptureWriter } from "./fixtures/capture-knowledge.ts";
 import { createKnowledgeEntryService } from "../src/services/knowledge-entry.ts";
 import { memoryKnowledgeRepository } from "./fixtures/knowledge-entry.ts";
 import { describe, expect, it } from "vitest";
@@ -14,7 +16,7 @@ function logger() { return createLogger({ environment: {}, destination: { write(
 
 describe("shared MCP factory contract", () => {
   it("advertises and invokes project context with independent per-call budgets", async () => {
-    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), logger: logger() }));
+    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: logger() }));
     try {
       await connection.initialize();
       const listing = await connection.request("tools/list");
@@ -30,7 +32,7 @@ describe("shared MCP factory contract", () => {
     } finally { await connection.close(); }
   });
   it.each([{ projectId: "private-invalid-id" }, { projectId: project.id, recentLimit: 26 }, { projectId: project.id, privateCallerKey: "private-value" }])("rejects invalid project context arguments without echoing input", async (input) => {
-    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), logger: logger() }));
+    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: logger() }));
     try {
       await connection.initialize();
       const reply = await connection.request("tools/call", { name: "get_project_context", arguments: input });
@@ -39,19 +41,19 @@ describe("shared MCP factory contract", () => {
     } finally { await connection.close(); }
   });
   it("maps relation failures through the context adapter without leaking raw errors", async () => {
-    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: { get: async () => { throw new DomainError("INVALID_RELATION"); } }, knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), logger: logger() }));
+    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: { get: async () => { throw new DomainError("INVALID_RELATION"); } }, knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: logger() }));
     try {
       await connection.initialize();
       const reply = await connection.request("tools/call", { name: "get_project_context", arguments: { projectId: project.id } });
       expect(reply.result).toMatchObject({ isError: true, structuredContent: { error: { code: "INVALID_RELATION", correlationId: expect.any(String) } } });
     } finally { await connection.close(); }
   });
-  it("discovers exactly three tools with input/output schemas and static registry", async () => {
-    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), logger: logger() }));
+  it("discovers exactly four tools with input/output schemas and static registry", async () => {
+    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: logger() }));
     try {
       expect((await connection.initialize()).result).toMatchObject({ serverInfo: { name: "devmemory" }, capabilities: { tools: { listChanged: false } } });
       const listed = await connection.request("tools/list");
-      expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry"]);
+      expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge"]);
       expect(listed.result?.tools?.[0]).toMatchObject({ inputSchema: { type: "object", properties: { limit: { minimum: 1, maximum: 100, default: 50 }, status: { enum: ["Active", "Paused", "Archived"] } } }, outputSchema: { type: "object" } });
       // Antigravity 1.5.3 rejects JSON Schema patterns containing JS-only \u
       // escapes. The wire schema must retain the equivalent portable hex form.
@@ -65,7 +67,7 @@ describe("shared MCP factory contract", () => {
     } finally { await connection.close(); }
   });
   it("calls the application service and returns consistent structured/text output", async () => {
-    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), logger: logger() }));
+    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: logger() }));
     try {
       await connection.initialize();
       const reply = await connection.request("tools/call", { name: "list_projects", arguments: { nameContains: "dEv", status: "Active", limit: 1 } });
@@ -77,7 +79,7 @@ describe("shared MCP factory contract", () => {
     } finally { await connection.close(); }
   });
   it.each([{ limit: 0 }, { status: "active" }, { unexpectedSyntheticSecretKey: "synthetic-secret-value" }, { nameContains: "" }, { cursor: "" }])("rejects invalid input safely: %j", async (input) => {
-    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), logger: logger() }));
+    const connection = await memoryConnection(createMcpServer({ projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: logger() }));
     try {
       await connection.initialize();
       const reply = await connection.request("tools/call", { name: "list_projects", arguments: input });
@@ -87,7 +89,7 @@ describe("shared MCP factory contract", () => {
     } finally { await connection.close(); }
   });
   it.each([new DomainError("RATE_LIMITED"), new Error("synthetic-secret-value and private stack")])("maps service failures without stack or secret leakage", async (failure) => {
-    const connection = await memoryConnection(createMcpServer({ projects: { list: async () => { throw failure; } }, projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), logger: logger() }));
+    const connection = await memoryConnection(createMcpServer({ projects: { list: async () => { throw failure; } }, projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: logger() }));
     try {
       await connection.initialize();
       const reply = await connection.request("tools/call", { name: "list_projects" });
@@ -96,10 +98,10 @@ describe("shared MCP factory contract", () => {
     } finally { await connection.close(); }
   });
   it("supports independent factory instances without duplicate tool registrations", async () => {
-    const services = { projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), logger: logger() };
+    const services = { projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: createKnowledgeEntryService(memoryKnowledgeRepository()), capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: logger() };
     for (let i = 0; i < 2; i++) {
       const connection = await memoryConnection(createMcpServer(services));
-      try { await connection.initialize(); expect((await connection.request("tools/list")).result?.tools).toHaveLength(3); }
+      try { await connection.initialize(); expect((await connection.request("tools/list")).result?.tools).toHaveLength(4); }
       finally { await connection.close(); }
     }
   });

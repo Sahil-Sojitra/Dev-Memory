@@ -11,6 +11,7 @@ import { inMemoryProjects, project } from "./fixtures/projects.ts";
 import { createContextFixtureApi } from "./fixtures/project-context.ts";
 import type { WireReply } from "./fixtures/mcp.ts";
 import { createKnowledgeFixtureApi, detail } from "./fixtures/knowledge-entry.ts";
+import { createCaptureFixtureApi, captureInput, capturedPage } from "./fixtures/capture-knowledge.ts";
 
 beforeEach(() => { vi.spyOn(console, "warn").mockImplementation(() => {}); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
@@ -130,6 +131,17 @@ describe("HTTP authentication boundary", () => {
 });
 
 describe("stateless Streamable HTTP protocol", () => {
+  it("runs create-only capture through the shared HTTP factory with synthetic writes only", async () => {
+    const api = createCaptureFixtureApi();
+    vi.spyOn(globalThis, "fetch").mockImplementation(api.fetch);
+    const application = createHttpApplication(() => validHttpEnvironment, { destination: { write() {} } });
+    const invalid = await application.fetch(request({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "capture_knowledge", arguments: { ...captureInput, verification: "Verified" } } }));
+    expect((await reply(invalid)).result?.isError).toBe(true); expect(api.creates).toHaveLength(0);
+    const response = await application.fetch(request({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "capture_knowledge", arguments: { ...captureInput, content: "Synthetic body" } } }));
+    expect(response.status).toBe(200); expect(response.headers.get("mcp-session-id")).toBeNull();
+    expect((await reply(response)).result).toMatchObject({ structuredContent: { entry: { ...capturedPage, verification: "Draft" }, body: { complete: true } } });
+    expect(api.creates).toHaveLength(1); expect(api.appends).toHaveLength(1);
+  });
   it("reads knowledge over independent HTTP requests without requiring a warm body cache", async () => {
     const api = createKnowledgeFixtureApi();
     vi.spyOn(globalThis, "fetch").mockImplementation(api.fetch);
@@ -162,7 +174,7 @@ describe("stateless Streamable HTTP protocol", () => {
     const notification = await application.fetch(request({ jsonrpc: "2.0", method: "notifications/initialized" }));
     expect(notification.status).toBe(202);
     const tools = await application.fetch(request());
-    expect((await reply(tools)).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry"]);
+    expect((await reply(tools)).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge"]);
     const called = await application.fetch(request({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "list_projects", arguments: { limit: 1, nameContains: "DEV" } } }));
     expect(called.status).toBe(200);
     const result = await reply(called);
@@ -181,7 +193,7 @@ describe("stateless Streamable HTTP protocol", () => {
     }
     expect(new Set(close.mock.instances).size).toBe(5);
     expect(api.requests).toHaveLength(6);
-    expect((await reply(await setup().application.fetch(request()))).result?.tools).toHaveLength(3);
+    expect((await reply(await setup().application.fetch(request()))).result?.tools).toHaveLength(4);
   });
   it("supports modern discovery/list/call with JSON and rejects subscriptions without opening a stream", async () => {
     const { application } = setup();
@@ -196,7 +208,7 @@ describe("stateless Streamable HTTP protocol", () => {
     const discovery = await modern("server/discover");
     expect(discovery.headers.get("content-type")).toContain("application/json");
     expect((await reply(discovery)).result).toMatchObject({ capabilities: { tools: { listChanged: false } } });
-    expect((await reply(await modern("tools/list"))).result?.tools).toHaveLength(3);
+    expect((await reply(await modern("tools/list"))).result?.tools).toHaveLength(4);
     expect((await reply(await modern("tools/call", { name: "list_projects", arguments: { limit: 1 } }))).error).toBeUndefined();
     const listen = await modern("subscriptions/listen", { notifications: { tools: { listChanged: true } } });
     expect(listen.headers.get("content-type")).toContain("application/json");

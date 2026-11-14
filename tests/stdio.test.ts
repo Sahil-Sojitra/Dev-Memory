@@ -4,6 +4,7 @@ import { stdioConnection } from "./fixtures/mcp.ts";
 import { FAKE_NOTION_TOKEN } from "./fixtures/environment.ts";
 import { project } from "./fixtures/projects.ts";
 import { detail } from "./fixtures/knowledge-entry.ts";
+import { captureInput, capturedPage } from "./fixtures/capture-knowledge.ts";
 
 describe("stdio entry with synthetic Notion API", () => {
   beforeAll(() => {
@@ -15,7 +16,7 @@ describe("stdio entry with synthetic Notion API", () => {
     const connection = stdioConnection(entry);
     try {
       expect((await connection.initialize()).result?.serverInfo?.name).toBe("devmemory");
-      expect((await connection.request("tools/list")).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry"]);
+      expect((await connection.request("tools/list")).result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge"]);
       const first = await connection.request("tools/call", { name: "list_projects", arguments: { limit: 1 } });
       expect(first.result?.structuredContent).toEqual({ projects: [project], hasMore: true, nextCursor: "fixture:1" });
       const second = await connection.request("tools/call", { name: "list_projects", arguments: { limit: 1, cursor: "fixture:1" } });
@@ -29,6 +30,9 @@ describe("stdio entry with synthetic Notion API", () => {
       const knowledge = await connection.request("tools/call", { name: "get_knowledge_entry", arguments: { pageId: detail.id } });
       expect(knowledge.result?.isError).not.toBe(true);
       expect(knowledge.result?.structuredContent).toMatchObject({ entry: detail, content: { markdown: "Readable content", truncated: false } });
+      const captured = await connection.request("tools/call", { name: "capture_knowledge", arguments: { ...captureInput, content: "Synthetic body" } });
+      expect(captured.result?.isError).not.toBe(true);
+      expect(captured.result?.structuredContent).toMatchObject({ entry: { ...capturedPage, verification: "Draft" }, body: { complete: true, blocksWritten: 1 } });
     } finally { await connection.close(); }
     const diagnostics = connection.diagnostics();
     expect(diagnostics.invalidLines).toEqual([]);
@@ -57,7 +61,7 @@ describe("stdio entry with synthetic Notion API", () => {
         "io.modelcontextprotocol/clientCapabilities": {},
       };
       const listed = await connection.request("tools/list", { _meta: meta });
-      expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry"]);
+      expect(listed.result?.tools?.map((tool) => tool.name)).toEqual(["list_projects", "get_project_context", "get_knowledge_entry", "capture_knowledge"]);
       const called = await connection.request("tools/call", { _meta: meta, name: "list_projects", arguments: { limit: 1 } });
       expect(called.error).toBeUndefined();
       expect(called.result?.isError).not.toBe(true);
