@@ -1,7 +1,9 @@
 import { createProjectFixtureApi } from "./projects.ts";
+import { createContextFixtureApi } from "./project-context.ts";
 
 // Test-only preload: all requests are synthetic, with no network fallback.
 const api = createProjectFixtureApi();
+const contextApi = createContextFixtureApi();
 globalThis.fetch = process.env.FIXTURE_SCHEMA_FAILURE === "1"
   ? async () => Response.json({ object: "error", status: 401, code: "unauthorized", message: "synthetic vendor payload" }, { status: 401 })
   : async (input, init) => {
@@ -9,6 +11,8 @@ globalThis.fetch = process.env.FIXTURE_SCHEMA_FAILURE === "1"
       // Simulate an upstream socket holding the process alive after MCP close.
       return new Promise(() => { setInterval(() => {}, 1_000); });
     }
+    const url = new Request(input, init).url;
+    if (url.includes("/pages/") || url.includes("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/query") || url.includes("cccccccc-cccc-4ccc-8ccc-cccccccccccc/query")) return contextApi.fetch(input, init);
     return api.fetch(input, init);
   };
 
