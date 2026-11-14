@@ -8,6 +8,11 @@ import { NOTION_SCHEMA } from "../../domain/schema-map.ts";
 import type { ValidatedDatabase } from "../../domain/notion-schema.ts";
 import type { ProjectRepository } from "../../domain/projects.ts";
 import { createNotionProjectRepository } from "./projects.ts";
+import { AsyncLocalStorage } from "node:async_hooks";
+import type { ProjectContextRepository, RequestBudget } from "../../domain/project-context.ts";
+import type { ValidatedSchema } from "../../domain/notion-schema.ts";
+import { createNotionContextRepository } from "./project-context.ts";
+import { cancelNotionBody, readNotionBody } from "./deadline.ts";
 
 export const NOTION_REQUEST_TIMEOUT_MS = 10_000;
 type SdkFetch = NonNullable<NonNullable<ConstructorParameters<typeof Client>[0]>["fetch"]>;
@@ -105,27 +110,50 @@ function metadataFailure(error: unknown, database: DatabaseKey, operation: Notio
 
 export interface NotionClient extends NotionSchemaReader {
   createProjectRepository(schema: ValidatedDatabase): ProjectRepository;
+  createContextRepository(schemas: ValidatedSchema): ProjectContextRepository;
 }
 
 export function createNotionClient(config: AppConfig["notion"], options: NotionReaderOptions = {}): NotionClient {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   const projectSources = new Set<string>();
+  const contextSources = new Set<string>();
+  const requestBudgets = new AsyncLocalStorage<RequestBudget>();
+  let contextEnabled = false;
   // Defense in depth: this integration has no write capability, even by accident.
   const readOnlyFetch: typeof globalThis.fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const metadataRead = method === "GET" && /^\/v1\/(databases|data_sources)\/[0-9a-f-]+$/i.test(url.pathname);
     const projectQuery = method === "POST" && [...projectSources].some((id) => url.pathname === "/v1/data_sources/" + id + "/query");
-    if ((!metadataRead && !projectQuery) || url.origin !== "https://api.notion.com"
-      || url.search || url.hash) {
+    const contextRead = contextEnabled && requestBudgets.getStore() !== undefined && method === "GET" && /^\/v1\/pages\/[0-9a-f-]+$/i.test(url.pathname);
+    const relationRead = contextEnabled && requestBudgets.getStore() !== undefined && method === "GET"
+      && /^\/v1\/pages\/[0-9a-f-]+\/properties\/[^/]+$/i.test(url.pathname)
+      && [...url.searchParams.keys()].every((key) => key === "page_size" || key === "start_cursor")
+      && url.searchParams.get("page_size") === "100";
+    const contextQuery = requestBudgets.getStore() !== undefined && method === "POST" && [...contextSources].some((id) => url.pathname === "/v1/data_sources/" + id + "/query");
+    if ((!metadataRead && !projectQuery && !contextRead && !contextQuery && !relationRead) || url.origin !== "https://api.notion.com"
+      || (url.search && !relationRead) || url.hash) {
       throw new DomainError("FORBIDDEN");
     }
-    return fetchImplementation(input, { ...init, redirect: "error" });
+    const budget = requestBudgets.getStore();
+    if (!budget) return fetchImplementation(input, { ...init, redirect: "error" });
+    const upstreamSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const signal = upstreamSignal ? AbortSignal.any([budget.signal, upstreamSignal]) : budget.signal;
+    return budget.run(async () => {
+      budget.consume();
+      const response = await fetchImplementation(input, { ...init, redirect: "error", signal });
+      try { budget.assertActive(); }
+      catch (error) { cancelNotionBody(response); throw error; }
+      return response;
+    });
   };
   // Adapt the JSON response surface. No SDK stream types escape.
   const sdkFetch: SdkFetch = async (url, init) => {
+    const budget = requestBudgets.getStore();
     const response = await readOnlyFetch(url, init);
-    return { ok: response.ok, status: response.status, headers: response.headers, text: () => response.text() };
+    return { ok: response.ok, status: response.status, headers: response.headers,
+      text: () => budget ? readNotionBody(response, budget) : response.text(),
+    };
   };
   // One client per application instance; metadata and project reads reuse it.
   const client = new Client({
@@ -146,6 +174,17 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
   }
 
   return Object.freeze({
+    createContextRepository(schemas: ValidatedSchema) {
+      for (const key of ["projects", "subprojects", "knowledge"] as const) {
+        if (schemas[key].databaseId !== config.databases[key]) throw new DomainError("FORBIDDEN");
+      }
+      contextEnabled = true;
+      for (const schema of Object.values(schemas)) contextSources.add(schema.dataSourceId);
+      // Wrap the whole SDK operation, including its otherwise non-abortable
+      // retry sleeps. A sleeping SDK continuation cannot start another fetch
+      // after expiry because every attempt rechecks the same budget.
+      return createNotionContextRepository(client, schemas, mapClientError, (budget, operation) => requestBudgets.run(budget, () => budget.run(operation)));
+    },
     createProjectRepository(schema: ValidatedDatabase) {
       if (schema.databaseId !== config.databases.projects) throw new DomainError("FORBIDDEN");
       projectSources.add(schema.dataSourceId);

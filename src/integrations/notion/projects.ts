@@ -20,7 +20,7 @@ function invalid(property?: ApprovedPropertyName): never {
   throw new SchemaDriftError([{ database: "projects", reason: "INVALID_METADATA", ...(property ? { property } : {}) }]);
 }
 
-function mapProject(raw: unknown, schema: ValidatedDatabase): Project {
+export function mapProject(raw: unknown, schema: ValidatedDatabase): Project {
   const parsed = pageSchema.safeParse(raw);
   if (!parsed.success) return invalid();
   const page = parsed.data;
