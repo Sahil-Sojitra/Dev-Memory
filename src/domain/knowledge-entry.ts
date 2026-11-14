@@ -40,4 +40,4 @@ export interface KnowledgeEntryResult {
   readonly cacheHit: boolean;
   readonly requestBudget: { readonly maxRequests: number; readonly usedRequests: number; readonly maxDurationMs: number };
 }
-export interface KnowledgeEntryService { get(input: unknown): Promise<KnowledgeEntryResult> }
+export interface KnowledgeEntryService { get(input: unknown, sharedBudget?: RequestBudget): Promise<KnowledgeEntryResult> }

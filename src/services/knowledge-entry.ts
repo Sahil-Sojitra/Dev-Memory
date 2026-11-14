@@ -18,10 +18,10 @@ export function createKnowledgeEntryService(repository: KnowledgeEntryRepository
   const cache = new Map<string, { body: KnowledgeBody; expires: number }>();
   let cacheCharacters = 0;
   function remove(key: string) { const item = cache.get(key); if (item) { cacheCharacters -= item.body.markdown.length; cache.delete(key); } }
-  return Object.freeze({ async get(input: unknown) {
+  return Object.freeze({ async get(input: unknown, sharedBudget?: RequestBudget) {
     const parsed = knowledgeEntryInputSchema.safeParse(input);
     if (!parsed.success) throw new RequestValidationError([{ field: "pageId" }]);
-    const budget = budgetFactory();
+    const budget = sharedBudget ?? budgetFactory();
     try {
       return await budget.run(async () => {
         const entry = await budget.run(() => repository.getEntry(parsed.data.pageId, budget));
@@ -102,6 +102,6 @@ export function createKnowledgeEntryService(repository: KnowledgeEntryRepository
           requestBudget: Object.freeze({ maxRequests: budget.maxRequests, usedRequests: budget.used, maxDurationMs: budget.maxDurationMs }),
         });
       });
-    } finally { budget.dispose(); }
+    } finally { if (!sharedBudget) budget.dispose(); }
   } });
 }

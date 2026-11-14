@@ -51,7 +51,9 @@ not recursively fetched as separate pages. Unsupported block descendants are
 not expanded. This is a readable Markdown/text conversion, not a lossless Notion
 export: layout, colors, underline and arbitrary embedded applications are omitted.
 
-- 20 outbound attempts and the existing 30-second monotonic overall deadline.
+- 20 outbound attempts and the existing 30-second monotonic overall deadline
+  for standalone retrieval. Search supplies its own shared 40-attempt budget;
+  nested body work uses that same caller-owned budget, not a separate allowance.
 - Every page/property/block request and SDK retry consumes the same budget.
 - Child lists use pages of at most 100. Repeated cursors and duplicate block IDs
   fail safely; no unbounded traversal is attempted.
