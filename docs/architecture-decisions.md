@@ -23,7 +23,7 @@ The evidence below records the earlier temporary spike, not a production server.
 | Shared services for both transports | Shared business services and tool registration | KAN-10 stdio/HTTP share KAN-9's factory and project service; local contract tests passed |
 | Static bearer authentication remotely | Authenticate before dispatch; HTTPS when hosted | KAN-10 stores current/next SHA-256 digests only and compares two fixed-size buffers with timingSafeEqual; auth failure tests pass |
 | Vercel Hobby as intended host | Function request handler without application-level `listen()` | **Hosted deployment is NOT YET VERIFIED** |
-| Exactly five business tools | Fixed registry below | KAN-13 adds `get_knowledge_entry` alongside `list_projects` and `get_project_context`; two remain for later tickets. The earlier spike exposed only `spike_echo` |
+| Exactly five business tools | Fixed registry below | KAN-14 adds create-only `capture_knowledge`; four tools are implemented and `search_knowledge` remains planned. The earlier spike exposed only `spike_echo` |
 | No additional persistence infrastructure | No separate database, queue, vector database, or embeddings in Phase 1 | None was needed for the spike |
 
 ## Approved business tools
@@ -43,6 +43,10 @@ and explicit scan completeness. See [project context](project-context.md).
 KAN-13 adds bounded, read-only Knowledge body retrieval and Markdown conversion.
 Its evictable process-local body cache is an optimization over Notion, not another
 source of truth or persistence layer. See [knowledge entry](knowledge-entry.md).
+
+KAN-14 adds guarded creation in the existing Knowledge data source. It shares
+project-scope validation, keeps AI captures unverified, and reports partial or
+unknown writes without replaying mutations. See [capture safety](capture-knowledge.md).
 
 ## Runtime and dependency policy
 

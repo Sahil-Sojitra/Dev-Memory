@@ -24,10 +24,13 @@ local stdio and authenticated, stateless Streamable HTTP.
 - Protect remote MCP requests with SHA-256 bearer-token digests and token rotation.
 - Provide structured stderr diagnostics, correlation IDs, and secret redaction.
 - Expose separate health and authenticated readiness endpoints.
+- Capture new Knowledge notes with guarded creation, explicit partial-write
+  recovery and mandatory human control over Verified status.
 
-Notion is the only source of truth. The current integration is read-only; it does
-not create records or change database schemas. Phase 1 does not introduce another
-database, queue, vector store, or embeddings.
+Notion is the only source of truth. Reads and a guarded create-only Knowledge
+capture tool are implemented; schema changes and updating/deleting existing
+records are not exposed. Phase 1 does not introduce another database, queue,
+vector store, or embeddings.
 
 ## Quickstart
 
@@ -38,7 +41,7 @@ database, queue, vector store, or embeddings.
 | Node.js | **24.22.1**; the project engine range is `>=24.22.1 <25` |
 | npm | **11.19.1** |
 | Notion API | **2025-09-03** |
-| Notion access | An integration with read access to all three existing databases |
+| Notion access | Read access to all three databases; insert-content capability for capture |
 | MCP client | Required to use the local stdio server interactively |
 
 ### 1. Install and verify
@@ -218,16 +221,34 @@ top-level `truncated` flag, content reasons and relation completeness before
 treating the result as complete. See the [knowledge entry contract](docs/knowledge-entry.md)
 for supported blocks, read bounds, cache freshness and error behavior.
 
+### Available: `capture_knowledge`
+
+Create a new Knowledge page after project/subproject and live schema validation:
+
+```json
+{
+  "projectId": "<PROJECT_PAGE_UUID>",
+  "title": "How the service starts",
+  "type": "Implementation",
+  "content": "# Startup\nNotes for a human to review."
+}
+```
+
+Verification defaults to `Draft`. Only `Draft`, `Hypothesis` and `Needs Review`
+are accepted; a human must mark an entry `Verified` in Notion after checking it.
+Duplicate titles produce warnings. On `PARTIAL_WRITE`, inspect the returned
+recovery page and confirmed progress; never blindly repeat capture. An unknown
+write outcome also requires manual inspection. See [capture safety and limits](docs/capture-knowledge.md).
+
 ### Planned tools
 
 The following approved tools are not implemented yet:
 
-- `capture_knowledge`
 - `search_knowledge`
 
 Subprojects and Knowledge are read through `get_project_context`; individual
-Knowledge bodies are read through `get_knowledge_entry`. Search and capture
-remain future tools.
+Knowledge bodies are read through `get_knowledge_entry`, and new notes are saved
+through `capture_knowledge`. Search remains a future tool.
 
 ## Architecture
 
@@ -377,6 +398,7 @@ issues or test fixtures.
 | [HTTP MCP](docs/http-mcp.md) | Authentication, rotation, security limits, and hosting gate |
 | [Project context](docs/project-context.md) | Context scope, knowledge lists, aggregate counts, budgets and truncation |
 | [Knowledge entry](docs/knowledge-entry.md) | Entry metadata, bounded Markdown body traversal, cache and completeness |
+| [Knowledge capture](docs/capture-knowledge.md) | Create-only safety, verification restrictions, limits and partial-write recovery |
 
 ## License
 
