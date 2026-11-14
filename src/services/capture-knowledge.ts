@@ -8,7 +8,8 @@ import { markdownToBlocks } from "./markdown-capture.ts";
 
 const normalizeTitle = (value: string) => value.trim().replace(/\s+/gu, " ").toLowerCase();
 export function createCaptureService(writer: CaptureWriter, repository: ProjectContextRepository,
-  budgetFactory: () => RequestBudget = createRequestBudget): CaptureService {
+  budgetFactory: () => RequestBudget = createRequestBudget, onKnowledgeChanged?: () => void): CaptureService {
+  const notify = () => { try { onKnowledgeChanged?.(); } catch { /* Cache maintenance cannot change write outcomes. */ } };
   return Object.freeze({ async capture(input: unknown) {
     const value = validateCapture(input);
     const blocks = markdownToBlocks(value.content); // All local validation precedes I/O.
@@ -43,10 +44,12 @@ export function createCaptureService(writer: CaptureWriter, repository: ProjectC
       // classified as unconfirmed. Do not race the entire workflow: confirmed
       // creation must remain available for recovery even when append expires.
       created = await writer.create(value, bindings, budget);
+      notify();
       for (const batch of batches) {
         await writer.append(created, batch, budget);
         confirmedBatches++; confirmedBlocks += batch.length;
       }
+      notify(); // Also invalidate searches that raced the create/append window.
       budget.assertActive();
       const warnings: ("DUPLICATE_TITLE" | "DUPLICATE_CHECK_INCOMPLETE")[] = [];
       if (matches) warnings.push("DUPLICATE_TITLE");
@@ -57,6 +60,7 @@ export function createCaptureService(writer: CaptureWriter, repository: ProjectC
         requestBudget: Object.freeze({ maxRequests: budget.maxRequests, usedRequests: budget.used, maxDurationMs: budget.maxDurationMs }),
       });
     } catch (error) {
+      if (created || (error instanceof DomainError && error.code === "WRITE_OUTCOME_UNKNOWN")) notify();
       if (created && confirmedBatches === batches.length) throw new WriteConfirmedAfterDeadlineError({
         pageId: created.id, url: created.url, confirmedBatches, totalBatches: batches.length, confirmedBlocks,
         totalBlocks: blocks.length, bodyComplete: true, doNotRetryCapture: true,

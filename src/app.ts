@@ -17,6 +17,8 @@ import type { KnowledgeEntryRepository } from "./domain/knowledge-entry.ts";
 import { createKnowledgeEntryService } from "./services/knowledge-entry.ts";
 import type { CaptureWriter } from "./domain/capture-knowledge.ts";
 import { createCaptureService } from "./services/capture-knowledge.ts";
+import type { SearchRepository } from "./domain/search-knowledge.ts";
+import { createSearchService } from "./services/search-knowledge.ts";
 
 // Configuration-only helper retained for KAN-6 callers. Stdio uses initializeApplication.
 export function runFoundation(environment: Environment, destination?: DestinationStream): number {
@@ -48,6 +50,7 @@ export interface ApplicationOptions {
   readonly contextRepository?: ProjectContextRepository;
   readonly knowledgeEntryRepository?: KnowledgeEntryRepository;
   readonly captureWriter?: CaptureWriter;
+  readonly searchRepository?: SearchRepository;
 }
 
 export async function initializeApplication(environment: Environment, options: ApplicationOptions = {}) {
@@ -69,9 +72,10 @@ export async function initializeApplication(environment: Environment, options: A
     const contextRepository = options.contextRepository ?? client.createContextRepository(schemas);
     const projectContext = createProjectContextService(contextRepository);
     const knowledgeEntry = createKnowledgeEntryService(options.knowledgeEntryRepository ?? client.createKnowledgeEntryRepository(schemas.knowledge));
-    const capture = createCaptureService(options.captureWriter ?? client.createCaptureWriter(schemas), contextRepository);
-    return Object.freeze({ config, notion, schemas, logger, projects, projectContext, knowledgeEntry, capture,
-      createServer: () => createMcpServer({ projects, projectContext, knowledgeEntry, capture, logger }),
+    const search = createSearchService(options.searchRepository ?? client.createSearchRepository(schemas.knowledge), contextRepository, knowledgeEntry);
+    const capture = createCaptureService(options.captureWriter ?? client.createCaptureWriter(schemas), contextRepository, undefined, search.invalidate);
+    return Object.freeze({ config, notion, schemas, logger, projects, projectContext, knowledgeEntry, capture, search,
+      createServer: () => createMcpServer({ projects, projectContext, knowledgeEntry, capture, search, logger }),
     });
   } catch (error) {
     logger.error("application_initialization_failed", { phase, error: mapError(error, getCorrelationId() ?? "unavailable") });
