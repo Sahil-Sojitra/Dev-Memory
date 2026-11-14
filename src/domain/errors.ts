@@ -1,6 +1,7 @@
 import type { DatabaseKey, SchemaIssue } from "./notion-schema.ts";
 
 export const ERROR_CATALOG = {
+  NOT_IN_KNOWLEDGE_DB: { message: "The page does not belong to the Knowledge data source.", httpStatus: 400, retryable: false },
   INVALID_RELATION: { message: "The subproject does not belong to the selected project.", httpStatus: 400, retryable: false },
   REQUEST_BUDGET_EXCEEDED: { message: "The request budget was exhausted.", httpStatus: 503, retryable: true },
   METHOD_NOT_ALLOWED: { message: "The HTTP method is not supported.", httpStatus: 405, retryable: false },
