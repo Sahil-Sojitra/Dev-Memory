@@ -204,16 +204,30 @@ The shared outbound request budget and scan caps can produce partial results;
 always inspect the returned completeness flags before treating counts as exact.
 See the [project context contract](docs/project-context.md) for fields and bounds.
 
+### Available: `get_knowledge_entry`
+
+Retrieve a Knowledge page's mapped metadata, project/subproject relations and
+readable Markdown body through either existing transport:
+
+```json
+{ "pageId": "<KNOWLEDGE_PAGE_UUID>" }
+```
+
+The page must belong to the configured Knowledge data source. Inspect the
+top-level `truncated` flag, content reasons and relation completeness before
+treating the result as complete. See the [knowledge entry contract](docs/knowledge-entry.md)
+for supported blocks, read bounds, cache freshness and error behavior.
+
 ### Planned tools
 
 The following approved tools are not implemented yet:
 
 - `capture_knowledge`
 - `search_knowledge`
-- `get_knowledge_entry`
 
-Subprojects and Knowledge are read through `get_project_context`; independent
-knowledge retrieval, search and capture remain future tools.
+Subprojects and Knowledge are read through `get_project_context`; individual
+Knowledge bodies are read through `get_knowledge_entry`. Search and capture
+remain future tools.
 
 ## Architecture
 
@@ -362,6 +376,7 @@ issues or test fixtures.
 | [Local MCP](docs/local-mcp.md) | Tool contract, Antigravity setup, and local verification |
 | [HTTP MCP](docs/http-mcp.md) | Authentication, rotation, security limits, and hosting gate |
 | [Project context](docs/project-context.md) | Context scope, knowledge lists, aggregate counts, budgets and truncation |
+| [Knowledge entry](docs/knowledge-entry.md) | Entry metadata, bounded Markdown body traversal, cache and completeness |
 
 ## License
 
