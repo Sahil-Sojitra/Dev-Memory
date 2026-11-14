@@ -14,6 +14,19 @@ function setup() {
   return { ...fixture, scope, service: createCaptureService(fixture.writer, scope) };
 }
 describe("capture input safety and create-only workflow", () => {
+  it.each(["confirmed", "partial", "unknown"])("invalidates search snapshots on %s write outcomes", async (outcome) => {
+    const { writer } = memoryCaptureWriter(); const invalidate = vi.fn();
+    if (outcome === "partial") writer.append = async () => { throw new DomainError("DEPENDENCY_UNAVAILABLE"); };
+    if (outcome === "unknown") writer.create = async () => { throw new DomainError("WRITE_OUTCOME_UNKNOWN"); };
+    const service = createCaptureService(writer, memoryContextRepository(), undefined, invalidate);
+    if (outcome === "confirmed") await expect(service.capture({ ...captureInput, content: "Body" })).resolves.toMatchObject({ body: { complete: true } });
+    else await expect(service.capture({ ...captureInput, content: "Body" })).rejects.toMatchObject({ code: outcome === "partial" ? "PARTIAL_WRITE" : "WRITE_OUTCOME_UNKNOWN" });
+    expect(invalidate).toHaveBeenCalled();
+  });
+  it("does not change a confirmed write outcome when cache maintenance fails", async () => {
+    const service = createCaptureService(memoryCaptureWriter().writer, memoryContextRepository(), undefined, () => { throw new Error("Synthetic cache failure"); });
+    await expect(service.capture(captureInput)).resolves.toMatchObject({ entry: capturedPage });
+  });
   it.each([false, true])("never labels fully confirmed writes PARTIAL_WRITE at final deadline expiry (body=%s)", async (withBody) => {
     let clock = 0; vi.spyOn(performance, "now").mockImplementation(() => clock);
     const { writer, creates, appends } = memoryCaptureWriter(); const create = writer.create; const append = writer.append;

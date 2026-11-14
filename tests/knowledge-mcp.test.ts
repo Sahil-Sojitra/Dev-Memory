@@ -1,3 +1,4 @@
+import { memorySearch } from "./fixtures/search-knowledge.ts";
 import { createCaptureService } from "../src/services/capture-knowledge.ts";
 import { memoryCaptureWriter } from "./fixtures/capture-knowledge.ts";
 import { describe, expect, it } from "vitest";
@@ -15,7 +16,7 @@ import { inMemoryProjects } from "./fixtures/projects.ts";
 
 async function connect(service: KnowledgeEntryService = createKnowledgeEntryService(memoryKnowledgeRepository())) {
   const logs: string[] = [];
-  const connection = await memoryConnection(createMcpServer({
+  const connection = await memoryConnection(createMcpServer({ search: memorySearch().service,
     projects: createProjectListingService(inMemoryProjects()), projectContext: createProjectContextService(memoryContextRepository()), knowledgeEntry: service,
     capture: createCaptureService(memoryCaptureWriter().writer, memoryContextRepository()), logger: createLogger({ environment: {}, destination: { write(line: string) { logs.push(line); } } }),
   }));
