@@ -23,7 +23,7 @@ The evidence below records the earlier temporary spike, not a production server.
 | Shared services for both transports | Shared business services and tool registration | KAN-10 stdio/HTTP share KAN-9's factory and project service; local contract tests passed |
 | Static bearer authentication remotely | Authenticate before dispatch; HTTPS when hosted | KAN-10 stores current/next SHA-256 digests only and compares two fixed-size buffers with timingSafeEqual; auth failure tests pass |
 | Vercel Hobby as intended host | Function request handler without application-level `listen()` | **Hosted deployment is NOT YET VERIFIED** |
-| Exactly five business tools | Fixed registry below | KAN-14 adds create-only `capture_knowledge`; four tools are implemented and `search_knowledge` remains planned. The earlier spike exposed only `spike_echo` |
+| Exactly five business tools | Fixed registry below | KAN-15 adds bounded read-only `search_knowledge`; all five tools are implemented locally. This does not establish live or hosted KAN-15 acceptance. The earlier spike exposed only `spike_echo` |
 | No additional persistence infrastructure | No separate database, queue, vector database, or embeddings in Phase 1 | None was needed for the spike |
 
 ## Approved business tools

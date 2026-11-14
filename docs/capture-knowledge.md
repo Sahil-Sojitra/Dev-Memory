@@ -116,6 +116,12 @@ and is never published as an on-time success. Do not repeat the capture.
 
 ## Verification boundary
 
+KAN-15 wires process-local search cache invalidation after confirmed creation,
+after append completion, and after partial or unknown write outcomes. A generation
+guard prevents an overlapping search from storing an invalidated snapshot. Cache
+maintenance does not alter confirmed-write or recovery semantics. Other processes
+and external Notion changes are observed after search cache expiry (60 seconds).
+
 Automated write tests use mocks and controlled fixtures only. No live Notion
 records are created for tests. Run npm run check with Node 24.22.1. A separately
 approved manual capture would require read and insert-content permissions; no

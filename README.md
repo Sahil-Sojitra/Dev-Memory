@@ -26,6 +26,8 @@ local stdio and authenticated, stateless Streamable HTTP.
 - Expose separate health and authenticated readiness endpoints.
 - Capture new Knowledge notes with guarded creation, explicit partial-write
   recovery and mandatory human control over Verified status.
+- Search Knowledge using deterministic keyword ranking, exact schema filters,
+  bounded body scanning and process-local caching with completeness diagnostics.
 
 Notion is the only source of truth. Reads and a guarded create-only Knowledge
 capture tool are implemented; schema changes and updating/deleting existing
@@ -240,15 +242,20 @@ Duplicate titles produce warnings. On `PARTIAL_WRITE`, inspect the returned
 recovery page and confirmed progress; never blindly repeat capture. An unknown
 write outcome also requires manual inspection. See [capture safety and limits](docs/capture-knowledge.md).
 
-### Planned tools
+### Available: `search_knowledge`
 
-The following approved tools are not implemented yet:
+Search existing Knowledge metadata and optionally up to 25 page bodies:
 
-- `search_knowledge`
+```json
+{ "query": "node startup", "depth": "auto", "limit": 10 }
+```
 
-Subprojects and Knowledge are read through `get_project_context`; individual
-Knowledge bodies are read through `get_knowledge_entry`, and new notes are saved
-through `capture_knowledge`. Search remains a future tool.
+Optional filters include project/subproject UUIDs and exact Type, Verification
+and tag options. `metadata` depth makes no body requests. Auto combines metadata
+and body scores before applying the result limit. Each search has 40 outbound
+attempts and a 30-second deadline; existing tools retain their 20-attempt default.
+Always inspect truncation and cache diagnostics. This is bounded keyword search.
+See the [search contract](docs/search-knowledge.md) for scoring, limits and caching.
 
 ## Architecture
 
@@ -399,6 +406,7 @@ issues or test fixtures.
 | [Project context](docs/project-context.md) | Context scope, knowledge lists, aggregate counts, budgets and truncation |
 | [Knowledge entry](docs/knowledge-entry.md) | Entry metadata, bounded Markdown body traversal, cache and completeness |
 | [Knowledge capture](docs/capture-knowledge.md) | Create-only safety, verification restrictions, limits and partial-write recovery |
+| [Knowledge search](docs/search-knowledge.md) | Keyword ranking, filters, bounded scans, shared budgets and cache diagnostics |
 
 ## License
 
