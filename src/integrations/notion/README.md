@@ -6,6 +6,9 @@ application-owned metadata, project-listing and project-context repository
 interfaces. The fetch guard permits metadata GETs and bounded project queries.
 Within a context request budget it additionally permits page retrieval, paginated
 Project relation reads, and queries against the three validated data sources.
+KAN-13 additionally permits budget-scoped block-child GETs for bounded Knowledge
+body retrieval after the service validates the page's Knowledge parent. Expanded
+Knowledge relations use the same guarded property endpoint and request budget.
 All other endpoint/method combinations and redirects are denied. Outbound attempts,
 including SDK retries, consume the context invocation's shared budget. Record
 writes and schema changes are not exposed. SDK types and raw payloads never reach services.

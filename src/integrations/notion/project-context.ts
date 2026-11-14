@@ -65,7 +65,7 @@ function classification(raw: unknown, schema: ValidatedDatabase) {
   const verification = f.select("verification", NOTION_SCHEMA.knowledge.verification.options);
   return { f, item: Object.freeze({ id: f.value.id.toLowerCase(), ...(type ? { type } : {}), ...(verification ? { verification } : {}) }) };
 }
-function knowledge(raw: unknown, schema: ValidatedDatabase): KnowledgeEntry {
+export function mapKnowledge(raw: unknown, schema: ValidatedDatabase): KnowledgeEntry {
   const { f, item } = classification(raw, schema);
   const updated = z.iso.datetime({ offset: true }).safeParse(f.field("lastUpdated").last_edited_time);
   const tags = z.array(z.object({ name: z.enum(NOTION_SCHEMA.knowledge.tags.options) })).safeParse(f.field("tags").multi_select);
@@ -154,7 +154,7 @@ export function createNotionContextRepository(client: Client, schemas: Validated
     async getProject(id, budget) { return mapProject(await retrieve(id, "projects", budget), schemas.projects); },
     async getSubproject(id, budget) { return completeSubproject(await retrieve(id, "subprojects", budget), budget); },
     listSubprojects(projectId, limit, cursor, budget) { return read("subprojects", limit, cursor, { property: property("subprojects", "project"), relation: { contains: projectId } }, (raw) => completeSubproject(raw, budget), budget); },
-    listKnowledge(input, budget) { return read("knowledge", input.limit, input.cursor, filter(input), knowledge, budget); },
+    listKnowledge(input, budget) { return read("knowledge", input.limit, input.cursor, filter(input), mapKnowledge, budget); },
     scanKnowledge(input, budget) { return read("knowledge", input.limit, input.cursor, filter(input), (raw, schema) => classification(raw, schema).item, budget); },
   } satisfies ProjectContextRepository);
 }

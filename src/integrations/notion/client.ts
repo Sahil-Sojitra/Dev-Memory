@@ -13,6 +13,8 @@ import type { ProjectContextRepository, RequestBudget } from "../../domain/proje
 import type { ValidatedSchema } from "../../domain/notion-schema.ts";
 import { createNotionContextRepository } from "./project-context.ts";
 import { cancelNotionBody, readNotionBody } from "./deadline.ts";
+import type { KnowledgeEntryRepository } from "../../domain/knowledge-entry.ts";
+import { createNotionKnowledgeEntryRepository } from "./knowledge-entry.ts";
 
 export const NOTION_REQUEST_TIMEOUT_MS = 10_000;
 type SdkFetch = NonNullable<NonNullable<ConstructorParameters<typeof Client>[0]>["fetch"]>;
@@ -111,6 +113,7 @@ function metadataFailure(error: unknown, database: DatabaseKey, operation: Notio
 export interface NotionClient extends NotionSchemaReader {
   createProjectRepository(schema: ValidatedDatabase): ProjectRepository;
   createContextRepository(schemas: ValidatedSchema): ProjectContextRepository;
+  createKnowledgeEntryRepository(schema: ValidatedDatabase): KnowledgeEntryRepository;
 }
 
 export function createNotionClient(config: AppConfig["notion"], options: NotionReaderOptions = {}): NotionClient {
@@ -131,8 +134,12 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
       && [...url.searchParams.keys()].every((key) => key === "page_size" || key === "start_cursor")
       && url.searchParams.get("page_size") === "100";
     const contextQuery = requestBudgets.getStore() !== undefined && method === "POST" && [...contextSources].some((id) => url.pathname === "/v1/data_sources/" + id + "/query");
-    if ((!metadataRead && !projectQuery && !contextRead && !contextQuery && !relationRead) || url.origin !== "https://api.notion.com"
-      || (url.search && !relationRead) || url.hash) {
+    const blockRead = contextEnabled && requestBudgets.getStore() !== undefined && method === "GET"
+      && /^\/v1\/blocks\/[0-9a-f-]+\/children$/i.test(url.pathname)
+      && [...url.searchParams.keys()].every((key) => key === "page_size" || key === "start_cursor")
+      && url.searchParams.get("page_size") === "100";
+    if ((!metadataRead && !projectQuery && !contextRead && !contextQuery && !relationRead && !blockRead) || url.origin !== "https://api.notion.com"
+      || (url.search && !relationRead && !blockRead) || url.hash) {
       throw new DomainError("FORBIDDEN");
     }
     const budget = requestBudgets.getStore();
@@ -174,6 +181,12 @@ export function createNotionClient(config: AppConfig["notion"], options: NotionR
   }
 
   return Object.freeze({
+    createKnowledgeEntryRepository(schema: ValidatedDatabase) {
+      if (schema.databaseId !== config.databases.knowledge) throw new DomainError("FORBIDDEN");
+      contextEnabled = true;
+      return createNotionKnowledgeEntryRepository(client, schema, (error) => mapClientError(error, "knowledge"),
+        (budget, operation) => requestBudgets.run(budget, () => budget.run(operation)));
+    },
     createContextRepository(schemas: ValidatedSchema) {
       for (const key of ["projects", "subprojects", "knowledge"] as const) {
         if (schemas[key].databaseId !== config.databases[key]) throw new DomainError("FORBIDDEN");
